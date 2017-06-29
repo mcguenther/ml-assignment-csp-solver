@@ -12,29 +12,29 @@ FILE_MODEL_FEATURE_IDENTIFYER = ".*feature([1-9]*).txt"
 FILE_MODEL_INTERATIONS_IDENTIFYER = ".*interactions([1-9]*).txt"
 
 
-def is_model(seach_space):
-    return match(seach_space, FILE_MODEL_IDENTIFYER)
+def is_model(search_space):
+    return match(search_space, FILE_MODEL_IDENTIFYER)
 
 
-def is_model_xml(seach_space):
-    return match(seach_space, FILE_MODEL_XML_IDENTIFYER)
+def is_model_xml(search_space):
+    return match(search_space, FILE_MODEL_XML_IDENTIFYER)
 
 
-def is_model_dimacs(seach_space):
-    return match(seach_space, FILE_MODEL_DIMACS_IDENTIFYER)
+def is_model_dimacs(search_space):
+    return match(search_space, FILE_MODEL_DIMACS_IDENTIFYER)
 
 
-def is_model_feature(seach_space):
-    return match(seach_space, FILE_MODEL_FEATURE_IDENTIFYER)
+def is_model_feature(search_space):
+    return match(search_space, FILE_MODEL_FEATURE_IDENTIFYER)
 
 
-def is_model_interactions(seach_space):
-    return match(seach_space, FILE_MODEL_INTERATIONS_IDENTIFYER)
+def is_model_interactions(search_space):
+    return match(search_space, FILE_MODEL_INTERATIONS_IDENTIFYER)
 
 
-def match(seach_space, pattern):
+def match(search_space, pattern):
     pattern_compiled = re.compile(pattern)
-    its_a_match = pattern_compiled.match(seach_space)
+    its_a_match = pattern_compiled.match(search_space)
     return its_a_match
 
 
@@ -142,7 +142,7 @@ class Interaction:
         self.features = arg
 
     def __str__(self):
-        return str(self.features) 
+        return str(self.features)
 
     def __unicode__(self):
         return self.__str__()
