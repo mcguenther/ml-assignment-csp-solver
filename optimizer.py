@@ -8,8 +8,8 @@ EXIT_FILE_ERROR = 3
 FILE_MODEL_IDENTIFYER = ".*(\.dimacs|\.xml)"
 FILE_MODEL_DIMACS_IDENTIFYER = ".*(\.dimacs)"
 FILE_MODEL_XML_IDENTIFYER = ".*(\.xml)"
-FILE_MODEL_FEATURE_IDENTIFYER = ".*feature([1-9]*).txt"
-FILE_MODEL_INTERATIONS_IDENTIFYER = ".*interactions([1-9]*).txt"
+FILE_MODEL_FEATURE_IDENTIFYER = ".*feature([0-9]*).txt"
+FILE_MODEL_INTERATIONS_IDENTIFYER = ".*interactions([0-9]*).txt"
 
 
 def is_model(search_space):
@@ -38,10 +38,14 @@ def match(search_space, pattern):
     return its_a_match
 
 
-def main(argv):
-    # base_dir = os.path.abspath(os.getcwd())
-    found_options = False
+class Model:
+    def __init__(self, vm, features, interactions):
+        self.vm = vm
+        self.features = features
+        self. interactions = interactions
 
+
+def main(argv):
     # first read terminal arguments
     found_options, file_model, file_model_feature, file_model_interations \
         = parse_args(argv)
@@ -51,14 +55,16 @@ def main(argv):
         sys.exit(EXIT_ARGUMENT_ERROR)
 
     print("Reading Files")
+
+    features = read_features(file_model_feature)
+    interactions = read_interactions(file_model_interations)
+    print(interactions)
     if is_model_dimacs(file_model):
         vm = read_vm_dimacs(file_model)
     else:
         vm = read_vm_xml(file_model)
 
-    features = read_features(file_model_feature)
-    interactions = read_interactions(file_model_interations)
-    print(interactions)
+    model = Model(vm, features, interactions)
 
     if not vm or not features or not interactions:
         print(help_str())
@@ -69,40 +75,62 @@ def main(argv):
     return optimum
 
 
-def read_vm_dimacs(file_model):
+def get_feature_name_mappings(content):
     pass
+
+def get_disjunction_list(content, feature_name_mappings):
+    pass
+
+
+
+def read_vm_dimacs(file_model):
+    content = read_file(file_model)
+    feature_name_mappings = get_feature_name_mappings(content)
+    disjunctions = get_disjunction_list(content, feature_name_mappings)
+    #for line in content:
+    #    if line.startswith("c"):
+    #        if
+    #        continue
+
 
 
 def read_vm_xml(file_model):
     pass
 
 
+def read_file(file_name):
+    with open(file_name) as f:
+        content = f.readlines()
+    return content
+
+
 def read_features(file_model_feature):
-    with open(file_model_feature) as f:
-        content = f.readlines()
-        feature_influences = {}
-        for line in content:
-            line = line.replace(" ", "")
-            line = line.replace("\n", "")
-            feature_name, influence = line.split(":")
-            feature_influences[feature_name] = influence
-
-    return feature_influences
-
-
-def read_interactions(file_model_interations):
+    content = read_file(file_model_feature)
     feature_influences = {}
-    with open(file_model_interations) as f:
-        content = f.readlines()
+    for line in content:
+        line = clean_line(line)
+        feature_name, influence = line.split(":")
+        feature_influences[feature_name] = influence
 
-        for line in content:
-            line = line.replace(" ", "")
-            line = line.replace("\n", "")
-            features, influence = line.split(":")
-            features_list = features.split("#")
-            interaction = Interaction(list(features_list))
-            feature_influences[interaction] = influence
     return feature_influences
+
+
+def read_interactions(file_model_interactions):
+    feature_influences = {}
+    content = read_file(file_model_interactions)
+    for line in content:
+        line = clean_line(line)
+        features, influence = line.split(":")
+        features_list = features.split("#")
+        interaction = Interaction(list(features_list))
+        feature_influences[interaction] = influence
+    return feature_influences
+
+
+def clean_line(line):
+    line = line.replace(" ", "")
+    line = line.replace("\n", "")
+    return line
 
 
 def acs(vm, features, interactions):
@@ -149,6 +177,16 @@ class Interaction:
 
     def __repr__(self):
         return self.__str__()
+
+
+class VmXML:
+    def __init__(self, xml):
+        pass
+
+
+class VmDimacs:
+    def __init__(self, dimacs):
+        pass
 
 
 if __name__ == "__main__":
