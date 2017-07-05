@@ -1,5 +1,6 @@
 import re
 import sys
+from random import randint
 
 # optimizer python module
 EXIT_ARGUMENT_ERROR = 2
@@ -42,7 +43,21 @@ class Model:
     def __init__(self, vm, features, interactions):
         self.vm = vm
         self.features = features
-        self. interactions = interactions
+        self.interactions = interactions
+
+    def assess_fitness(self, dummy_config):
+        fitness = self.features["root"]
+
+        for feature in dummy_config:
+            value = self.features[feature]
+            fitness += value
+
+        for interaction_features in self.interactions:
+            if set(interaction_features).issubset(set(dummy_config)):
+                value = self.interactions[interaction_features]
+                fitness += value
+
+        return fitness
 
 
 def main(argv):
@@ -70,7 +85,7 @@ def main(argv):
         print(help_str())
         sys.exit(EXIT_FILE_ERROR)
 
-    optimum = acs(vm, features, interactions)
+    optimum = acs(model)
     print(optimum)
     return optimum
 
@@ -78,24 +93,24 @@ def main(argv):
 def get_feature_name_mappings(content):
     pass
 
+
 def get_disjunction_list(content, feature_name_mappings):
     pass
-
 
 
 def read_vm_dimacs(file_model):
     content = read_file(file_model)
     feature_name_mappings = get_feature_name_mappings(content)
     disjunctions = get_disjunction_list(content, feature_name_mappings)
-    #for line in content:
+    # for line in content:
     #    if line.startswith("c"):
     #        if
     #        continue
-
+    return True
 
 
 def read_vm_xml(file_model):
-    pass
+    return True
 
 
 def read_file(file_name):
@@ -110,7 +125,7 @@ def read_features(file_model_feature):
     for line in content:
         line = clean_line(line)
         feature_name, influence = line.split(":")
-        feature_influences[feature_name] = influence
+        feature_influences[feature_name] = float(influence)
 
     return feature_influences
 
@@ -122,8 +137,8 @@ def read_interactions(file_model_interactions):
         line = clean_line(line)
         features, influence = line.split(":")
         features_list = features.split("#")
-        interaction = Interaction(list(features_list))
-        feature_influences[interaction] = influence
+        interaction = tuple(features_list)
+        feature_influences[interaction] = float(influence)
     return feature_influences
 
 
@@ -133,7 +148,19 @@ def clean_line(line):
     return line
 
 
-def acs(vm, features, interactions):
+def acs(model):
+    dummy_config = []
+    num_features = randint(30, 50)
+    for n in range(num_features):
+        max_index = len(model.features)
+        i = randint(0, max_index - 1)
+        feature = list(model.features.keys())[i]
+        dummy_config.append(feature)
+
+    print(dummy_config)
+    fitness = model.assess_fitness(dummy_config)
+    print(fitness)
+
     pass
 
 
@@ -162,21 +189,6 @@ def parse_args(argv):
 
     return found_options, file_model, file_model_feature, \
            file_model_interations
-
-
-class Interaction:
-    def __init__(self, arg):
-        arg.sort()
-        self.features = arg
-
-    def __str__(self):
-        return str(self.features)
-
-    def __unicode__(self):
-        return self.__str__()
-
-    def __repr__(self):
-        return self.__str__()
 
 
 class VmXML:
