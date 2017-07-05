@@ -39,27 +39,6 @@ def match(search_space, pattern):
     return its_a_match
 
 
-class Model:
-    def __init__(self, vm, features, interactions):
-        self.vm = vm
-        self.features = features
-        self.interactions = interactions
-
-    def assess_fitness(self, dummy_config):
-        fitness = self.features["root"]
-
-        for feature in dummy_config:
-            value = self.features[feature]
-            fitness += value
-
-        for interaction_features in self.interactions:
-            if set(interaction_features).issubset(set(dummy_config)):
-                value = self.interactions[interaction_features]
-                fitness += value
-
-        return fitness
-
-
 def main(argv):
     # first read terminal arguments
     found_options, file_model, file_model_feature, file_model_interations \
@@ -149,19 +128,37 @@ def clean_line(line):
 
 
 def acs(model):
+    # init
+    components = model.features  # feature names as keys and influences as values
+    pop_size = 5
+    elitist_learning_rate = 0.001
+    evaporation_rate = 0.1
+    pheromones_init = 0.5
+    # TODO: check parameters for component selection
+    hill_climbing_its = 0
+    elitist_select_prob = 0.5
+
+    pheromones = [pheromones_init] * len(components)
+    best = None
+
+    # main part
+
+
+
+    # fitness = model.assess_fitness(dummy_config)
+
+
+
+
+def create_dummy_config(model, min, max):
     dummy_config = []
-    num_features = randint(30, 50)
+    num_features = randint(min, max)
     for n in range(num_features):
         max_index = len(model.features)
         i = randint(0, max_index - 1)
         feature = list(model.features.keys())[i]
         dummy_config.append(feature)
-
-    print(dummy_config)
-    fitness = model.assess_fitness(dummy_config)
-    print(fitness)
-
-    pass
+    return dummy_config
 
 
 def help_str():
@@ -189,6 +186,27 @@ def parse_args(argv):
 
     return found_options, file_model, file_model_feature, \
            file_model_interations
+
+
+class Model:
+    def __init__(self, vm, features, interactions):
+        self.vm = vm
+        self.features = features
+        self.interactions = interactions
+
+    def assess_fitness(self, dummy_config):
+        fitness = self.features["root"]
+
+        for feature in dummy_config:
+            value = self.features[feature]
+            fitness += value
+
+        for interaction_features in self.interactions:
+            if set(interaction_features).issubset(set(dummy_config)):
+                value = self.interactions[interaction_features]
+                fitness += value
+
+        return fitness
 
 
 class VmXML:
