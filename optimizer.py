@@ -1,6 +1,8 @@
 import re
 import time
 import sys
+import pycosat
+
 from random import randint
 
 EXIT_ARGUMENT_ERROR = 2
@@ -21,8 +23,23 @@ FILE_MODEL_INTERATIONS_IDENTIFYER = ".*interactions([0-9]*).txt"
 class Component:
     def __init__(self, feature, state, pheromone):
         self.feature = feature
+        # untoggled feature: state = 0
+        # toggled feature: state = 1
         self.state = state
         self.pheromone = pheromone
+
+    def to_literal(self, name_dict):
+        literal = name_dict[self.feature]
+        if not self.state:
+            literal = literal * -1
+
+        return literal
+
+    def __str__(self):
+        return "Component( " + self.feature + ", " + str(self.state) + ", " + str(self.pheromone) + " )"
+
+    def __repr__(self):
+        return self.__str__()
 
 
 class VM:
@@ -36,7 +53,7 @@ class Model:
         self.interactions = interactions
 
         if is_model_dimacs(vm_path):
-            self.vm = self.read_vm_dimacs(vm_path)
+            self.name_dict, self.constraint_list = self.read_vm_dimacs(vm_path)
         else:
             self.vm = self.read_vm_xml(vm_path)
 
@@ -45,47 +62,36 @@ class Model:
 
     def read_vm_dimacs(self, file_model):
         content = read_file(file_model)
-        # feature_name_mappings = get_feature_name_mappings(content)
-        # disjunctions = get_disjunction_list(content, feature_name_mappings)
         d = {}
-        constraints = {}
         for line in content:
             if line.startswith("c"):
-                line = line.split(" ")
+                line = line.split()
                 if len(line) == 3:
                     line = line[1:]
                     (val, key) = line
+                    val = val.replace("$", "")
+                    val = int(val)
                     d[key] = val
-            elif not line.startswith("p"):
-                feature_ids = line.split(" ")
-                feature_ids = feature_ids[:-1]  # remove trailing 0
-                feature_signs = {}
-                for f_id in feature_ids:
-                    f_id = int(f_id)
-                    sign = 1
-                    if str(f_id).startswith("-"):
-                        sign = -1
-                        f_id = abs(f_id)
-                    f_name = d[str(f_id)]
-                    feature_signs[f_name] = sign
 
-                # lambda clause to formulate constraint fo scp solver
-                # they take a list of features, apply OR to them and should return True to be valid
-                lambda_expr = lambda *x: self.apply_or_to_tuple(x) is True
-                constraints[lambda_expr] = feature_signs
+        # from http://techqa.info/programming/question/28890268/parse-dimacs-cnf-file-python
+        cnf = list()
+        cnf.append(list())
 
-        return constraints
+        for line in content:
+            tokens = line.split()
+            if len(tokens) != 0 and tokens[0] not in ("p", "c"):
+                for tok in tokens:
+                    lit = int(tok)
+                    if lit == 0:
+                        cnf.append(list())
+                    else:
+                        cnf[-1].append(lit)
 
-    def apply_or_to_tuple(self, or_tuple):
-        # or_val = False
-        # for entry in or_tuple:
-        # or_val = or_val or entry
-        # return or_val
-        for entry in or_tuple:
-            if entry is True:
-                return True
+        # TODO remove after testing for performance
+        assert len(cnf[-1]) == 0
+        cnf.pop()
 
-        return False
+        return d, cnf
 
 
 class Solution:
@@ -102,8 +108,32 @@ class Solution:
 
         return True
 
-    def get_valid_components(self):
-        pass
+    def get_valid_components(self, pheromones_init):
+        valid_components = []
+        all_features = set(self.model.features)
+        ok_features = set((comp.feature for comp in self.components))
+        rest_features = all_features - ok_features
+        rest_features.remove("root")
+
+        config_literals = list((list(comp.to_literal()) for comp in self.components))
+        constraints = self.model.constraint_list + config_literals
+
+        for test_feature in rest_features:
+            for toggle in (0, 1):
+                tmp_component = Component(test_feature, toggle, pheromones_init)
+                tmp_literal = tmp_component.to_literal(self.model.name_dict)
+                constraints.append([tmp_literal])
+
+                # show time
+                result = pycosat.solve(constraints)
+                constraints.pop()
+                if result in ("UNSAT", "UNKNOWN"):
+                    continue
+
+                # let's get this party started!
+                valid_components.append(tmp_component)
+
+        return valid_components
 
     def clear(self):
         self.components = []
@@ -164,7 +194,7 @@ class ACS:
             for n in range(self.pop_size):
                 solution = Solution(self.model)
                 while not solution.is_complete():
-                    component_selection = solution.get_valid_components()
+                    component_selection = solution.get_valid_components(self.pheromones_init)
                     if not component_selection:
                         solution.clear()
                         continue
