@@ -49,16 +49,22 @@ class Solution:
         self.fitness = None
 
     def is_complete(self):
-        pass
+        for feature in self.model.features:
+            feature_gen = (comp.feature for comp in self.components)
+            if feature not in set(feature_gen):
+                return False
+
+        return True
 
     def get_valid_components(self):
         pass
 
     def clear(self):
-        pass
+        self.components = []
+        self.fitness = None
 
     def append(self, new_component):
-        pass
+        self.components.append(new_component)
 
     def get_fitness(self):
         if not self.fitness:
