@@ -25,21 +25,67 @@ class Component:
         self.pheromone = pheromone
 
 
-class VmDimacs:
+class VM:
     def __init__(self, dimacs):
         pass
 
 
-class VmXML:
-    def __init__(self, xml):
-        pass
-
-
 class Model:
-    def __init__(self, vm, features, interactions):
-        self.vm = vm
+    def __init__(self, vm_path, features, interactions):
         self.features = features
         self.interactions = interactions
+
+        if is_model_dimacs(vm_path):
+            self.vm = self.read_vm_dimacs(vm_path)
+        else:
+            self.vm = self.read_vm_xml(vm_path)
+
+    def read_vm_xml(self, file_model):
+        return True
+
+    def read_vm_dimacs(self, file_model):
+        content = read_file(file_model)
+        # feature_name_mappings = get_feature_name_mappings(content)
+        # disjunctions = get_disjunction_list(content, feature_name_mappings)
+        d = {}
+        constraints = {}
+        for line in content:
+            if line.startswith("c"):
+                line = line.split(" ")
+                if len(line) == 3:
+                    line = line[1:]
+                    (val, key) = line
+                    d[key] = val
+            elif not line.startswith("p"):
+                feature_ids = line.split(" ")
+                feature_ids = feature_ids[:-1]  # remove trailing 0
+                feature_signs = {}
+                for f_id in feature_ids:
+                    f_id = int(f_id)
+                    sign = 1
+                    if str(f_id).startswith("-"):
+                        sign = -1
+                        f_id = abs(f_id)
+                    f_name = d[str(f_id)]
+                    feature_signs[f_name] = sign
+
+                # lambda clause to formulate constraint fo scp solver
+                # they take a list of features, apply OR to them and should return True to be valid
+                lambda_expr = lambda *x: self.apply_or_to_tuple(x) is True
+                constraints[lambda_expr] = feature_signs
+
+        return constraints
+
+    def apply_or_to_tuple(self, or_tuple):
+        # or_val = False
+        # for entry in or_tuple:
+        # or_val = or_val or entry
+        # return or_val
+        for entry in or_tuple:
+            if entry is True:
+                return True
+
+        return False
 
 
 class Solution:
@@ -184,21 +230,6 @@ def get_disjunction_list(content, feature_name_mappings):
     pass
 
 
-def read_vm_dimacs(file_model):
-    content = read_file(file_model)
-    feature_name_mappings = get_feature_name_mappings(content)
-    disjunctions = get_disjunction_list(content, feature_name_mappings)
-    # for line in content:
-    #    if line.startswith("c"):
-    #        if
-    #        continue
-    return True
-
-
-def read_vm_xml(file_model):
-    return True
-
-
 def read_file(file_name):
     with open(file_name) as f:
         content = f.readlines()
@@ -286,14 +317,10 @@ def main(argv):
     features = read_features(file_model_feature)
     interactions = read_interactions(file_model_interations)
     print(interactions)
-    if is_model_dimacs(file_model):
-        vm = read_vm_dimacs(file_model)
-    else:
-        vm = read_vm_xml(file_model)
 
-    model = Model(vm, features, interactions)
+    model = Model(file_model, features, interactions)
 
-    if not vm or not features or not interactions:
+    if not file_model or not features or not interactions:
         print(help_str())
         sys.exit(EXIT_FILE_ERROR)
 
