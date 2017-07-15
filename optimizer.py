@@ -2,6 +2,7 @@ import re
 import time
 import sys
 import pycosat
+import random
 
 from random import randint
 
@@ -95,9 +96,12 @@ class Model:
 
 
 class Solution:
-    def __init__(self, model):
+    def __init__(self, model, components=None):
         self.model = model
-        self.components = []
+        if components is None:
+            self.components = []
+        else:
+            self.components = components
         self.fitness = None
 
     def is_complete(self):
@@ -115,7 +119,7 @@ class Solution:
         rest_features = all_features - ok_features
         rest_features.remove("root")
 
-        config_literals = list((list(comp.to_literal()) for comp in self.components))
+        config_literals = list(([comp.to_literal(self.model.name_dict)] for comp in self.components))
         constraints = self.model.constraint_list + config_literals
 
         for test_feature in rest_features:
@@ -170,12 +174,16 @@ class ACS:
         # init
         self.model = model
         self.pop_size = 5
-        self.elitist_learning_rate = 0.001
+        self.elitist_learning_rate = 0.1
         self.evaporation_rate = 0.1
         self.pheromones_init = 0.5
         # TODO: check parameters for component selection
         self.hill_climbing_its = 0
         self.elitist_select_prob = 0.5
+
+        # from the 1997 paper reflecting the impact of the fitness
+        self.beta = 2
+
         self.components = []
         for feature in model.features:
             component_off = Component(feature, 0, self.pheromones_init)
@@ -199,7 +207,7 @@ class ACS:
                         solution.clear()
                         continue
                     else:
-                        new_component = self.elitist_component_selection(component_selection)
+                        new_component = self.elitist_component_selection(solution, component_selection)
                         solution.append(new_component)
                 solution = self.hill_climbing(solution)
 
@@ -214,8 +222,28 @@ class ACS:
                                           + self.elitist_learning_rate * best.get_fitness()
         return best
 
-    def elitist_component_selection(self, component_selection):
-        pass
+    def elitist_component_selection(self, solution, component_selection):
+        fitness_old = solution.assess_fitness()
+        old_components = solution.components
+        fitness_map = {}
+        best = None
+        for new_comp in component_selection:
+            new_solution = Solution(self.model, old_components + [new_comp])
+            fitness_new = new_solution.assess_fitness()
+            fitness_delta = fitness_new - fitness_old
+            score = new_comp.pheromone * pow(1 / fitness_delta, self.beta)
+            fitness_map[new_comp] = score
+
+        q = random.random()
+        q = 0.0
+        if q <= self.elitist_select_prob:
+            # do elitist exploitation
+            best = min(fitness_map, key=fitness_map.get)
+        else:
+            pass
+        # biased exploration
+
+        return best
 
     def hill_climbing(self, solution):
         return solution
