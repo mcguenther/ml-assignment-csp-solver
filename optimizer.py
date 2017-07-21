@@ -242,6 +242,7 @@ class ACS:
                                           + self.elitist_learning_rate * best.get_fitness()
         return best
 
+    @timeit
     def elitist_component_selection(self, solution, component_selection):
         fitness_old = solution.get_fitness()
         old_components = solution.components
@@ -249,7 +250,7 @@ class ACS:
         best = None
         for new_comp in component_selection:
             # fitness_delta = self.assess_fitness_complete(fitness_old, new_comp, old_components)
-            fitness_delta = self.assess_fitness_only_one_feature(fitness_old, new_comp, solution)
+            fitness_delta = self.assess_fitness_complete(fitness_old, new_comp, solution)
             score = new_comp.pheromone * pow(1 / fitness_delta, self.beta)
             fitness_map[new_comp] = score
 
@@ -264,7 +265,8 @@ class ACS:
 
         return best
 
-    def assess_fitness_complete(self, fitness_old, new_comp, old_components):
+    def assess_fitness_complete(self, fitness_old, new_comp, solution):
+        old_components = solution.components
         new_solution = Solution(self.model, old_components + [new_comp])
         fitness_new = new_solution.get_fitness()
         fitness_delta = fitness_new - fitness_old
