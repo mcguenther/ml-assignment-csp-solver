@@ -21,6 +21,18 @@ FILE_MODEL_FEATURE_IDENTIFYER = ".*feature([0-9]*).txt"
 FILE_MODEL_INTERATIONS_IDENTIFYER = ".*interactions([0-9]*).txt"
 
 
+def timeit(method):
+    def timed(*args, **kw):
+        start = time.time()
+        result = method(*args, **kw)
+        end = time.time()
+        print('%r (%r, %r) %2.2f sec' % \
+              (method.__name__, args, kw, end - start))
+        return result
+
+    return timed
+
+
 class Component:
     def __init__(self, feature, state, pheromone):
         self.feature = feature
@@ -61,6 +73,7 @@ class Model:
     def read_vm_xml(self, file_model):
         return True
 
+    @timeit
     def read_vm_dimacs(self, file_model):
         content = read_file(file_model)
         d = {}
@@ -103,6 +116,7 @@ class Solution:
         else:
             self.components = components
         self.fitness = None
+        self.has_changed_since_eval = True
 
     def is_complete(self):
         for feature in self.model.features:
@@ -112,6 +126,7 @@ class Solution:
 
         return True
 
+    @timeit
     def get_valid_components(self, pheromones_init):
         valid_components = []
         all_features = set(self.model.features)
@@ -141,17 +156,21 @@ class Solution:
 
     def clear(self):
         self.components = []
+        self.has_changed_since_eval = True
         self.fitness = None
 
     def append(self, new_component):
         self.components.append(new_component)
+        self.has_changed_since_eval = True
 
     def get_fitness(self):
-        if not self.fitness:
+        if not self.fitness or self.has_changed_since_eval:
             self.fitness = self.assess_fitness()
+            self.has_changed_since_eval = False
 
         return self.fitness
 
+    @timeit
     def assess_fitness(self):
         fitness = self.model.features["root"]
 
@@ -191,7 +210,7 @@ class ACS:
             self.components.append(component_off)
             self.components.append(component_on)
 
-        self.max_run_time = 30  # in seconds
+        self.max_run_time = 10  # in seconds
 
     def find_best_solution(self):
         # main part
@@ -204,6 +223,7 @@ class ACS:
                 while not solution.is_complete():
                     component_selection = solution.get_valid_components(self.pheromones_init)
                     if not component_selection:
+                        print("ended up with invalid solution; starting over")
                         solution.clear()
                         continue
                     else:
@@ -223,14 +243,13 @@ class ACS:
         return best
 
     def elitist_component_selection(self, solution, component_selection):
-        fitness_old = solution.assess_fitness()
+        fitness_old = solution.get_fitness()
         old_components = solution.components
         fitness_map = {}
         best = None
         for new_comp in component_selection:
-            new_solution = Solution(self.model, old_components + [new_comp])
-            fitness_new = new_solution.assess_fitness()
-            fitness_delta = fitness_new - fitness_old
+            # fitness_delta = self.assess_fitness_complete(fitness_old, new_comp, old_components)
+            fitness_delta = self.assess_fitness_only_one_feature(fitness_old, new_comp, solution)
             score = new_comp.pheromone * pow(1 / fitness_delta, self.beta)
             fitness_map[new_comp] = score
 
@@ -244,6 +263,16 @@ class ACS:
         # biased exploration
 
         return best
+
+    def assess_fitness_complete(self, fitness_old, new_comp, old_components):
+        new_solution = Solution(self.model, old_components + [new_comp])
+        fitness_new = new_solution.get_fitness()
+        fitness_delta = fitness_new - fitness_old
+        return fitness_delta
+
+    def assess_fitness_only_one_feature(self, fitness_old, new_comp, old_solution):
+        fitness_delta_isolated = old_solution.model.features[new_comp.feature]
+        return fitness_delta_isolated
 
     def hill_climbing(self, solution):
         return solution
