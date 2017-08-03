@@ -83,6 +83,7 @@ class Model:
         name2literal = {}
         name2excluded = {}
         name2is_optional = {}
+        parent2children = {}
 
         cnf = []
         for option in root.iter('configurationOption'):
@@ -91,6 +92,13 @@ class Model:
             new_literal = len(name2literal) + 1
             name2literal[key] = new_literal
             name2is_optional[key] = is_optional
+
+            parent_option = option.find('parent')
+            if parent_option.text.strip():
+                parent_id = name2literal[parent_option.text]
+                if parent_id not in parent2children:
+                    parent2children[parent_id] = set()
+                parent2children[parent_id].add(new_literal)
 
             excluded_options_tag = option.find('excludedOptions')
             excluded_options = excluded_options_tag.findall("options")
@@ -101,11 +109,13 @@ class Model:
             else:
                 if not is_optional:
                     cnf.append([new_literal])
+
+        candidate_cnf = []
         for key in name2excluded:
             # try to add restrictions only once per excluded list
             literal_key = name2literal[key]
             excluded_ids = []
-            candidate_cnf = []
+
             for excluded_name in name2excluded[key]:
                 excluded_id = name2literal[excluded_name]
                 excluded_ids.append(excluded_id)
@@ -118,9 +128,19 @@ class Model:
                 all_options.append(literal_key)
                 candidate_cnf.append(sorted(all_options))
 
-            for candidate in candidate_cnf:
-                if candidate not in cnf:
-                    cnf.append(candidate)
+        for parent_id in parent2children:
+            children = parent2children[parent_id]
+            # add child -> parent
+            for child in children:
+                candidate_cnf.append(sorted([-child, parent_id]))
+
+            # add parent -> any child
+            parent_implicates_any_child = [-parent_id] + list(children)
+            candidate_cnf.append(sorted(parent_implicates_any_child))
+
+        for candidate in candidate_cnf:
+            if candidate not in cnf:
+                cnf.append(candidate)
 
         return name2literal, cnf
 
@@ -197,6 +217,7 @@ class Solution:
 
         for test_feature in rest_features:
             for toggle in (0, 1):
+                # TODO instead of creating new one, use components field of ACS
                 tmp_component = Component(test_feature, toggle, pheromones_init)
                 tmp_literal = tmp_component.to_literal(self.model.name_dict)
                 constraints.append([tmp_literal])
@@ -327,6 +348,7 @@ class ACS:
             for n in range(self.pop_size):
                 solution = Solution(self.model)
                 while not solution.is_complete():
+                    # TODO pass self.components instead of self.pheromones_init
                     component_selection = solution.get_valid_components(self.pheromones_init)
                     if not component_selection:
                         print("ended up with invalid solution; starting over")
@@ -365,7 +387,7 @@ class ACS:
             fitness_map[new_comp] = score
 
         q = random.random()
-        q = 0.0
+        # q = 0.0
         if q <= self.elitist_select_prob:
             # do elitist exploitation
             best = min(fitness_map, key=fitness_map.get)
