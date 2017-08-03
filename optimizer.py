@@ -6,6 +6,7 @@ import random
 import xml.etree.ElementTree as ET
 
 from random import randint
+from itertools import combinations
 
 EXIT_ARGUMENT_ERROR = 2
 
@@ -35,7 +36,7 @@ def timeit(method):
 
 
 class Component:
-    def __init__(self, feature, state, pheromone):
+    def __init__(self, feature, state, pheromone=None):
         self.feature = feature
         # untoggled feature: state = 0
         # toggled feature: state = 1
@@ -268,6 +269,51 @@ class Solution:
 
         return fitness
 
+
+class BruteForce:
+    def __init__(self, model):
+        # init
+        self.model = model
+        # do we need to init these components?
+        self.components = []
+        for feature in model.features:
+            print(feature)
+            component_off = Component(feature, 0)
+            component_on = Component(feature, 1)
+            self.components.append(component_off)
+            self.components.append(component_on)
+        self.max_run_time = 10  # in seconds
+
+    def find_best_solution(self):
+        # main part
+        best = None
+        print()
+        cnf_solutions = pycosat.itersolve(self.model.constraint_list)
+
+        counter = 0
+        for sol in cnf_solutions:
+            # print(sol)
+            components = []
+            solution = Solution(self.model, components)
+            print("Init solution:", solution.get_fitness())
+            for number in sol:
+                print("Number:", number)
+                feature_name = next(key for key, value in self.model.name_dict.items() if value == abs(number))
+                toggle = lambda x: (1, 0)[x < 0]
+                new_component = Component(feature_name, toggle(number))
+                print(new_component)
+                components.append(new_component)
+            counter += 1
+            solution = Solution(self.model, components)
+            if not best or (solution.get_fitness() > best.get_fitness()):
+                best = solution
+            print("Solution components:", solution.components)
+            print("Solution fitness:", solution.get_fitness())
+            print()
+
+        print(counter, "solutions")
+        print("Best fitness:", best.get_fitness())
+        return best
 
 class ACS:
     def __init__(self, model):
@@ -514,9 +560,14 @@ def main(argv):
         print(help_str())
         sys.exit(EXIT_FILE_ERROR)
 
-    acs = ACS(model)
-    optimum = acs.find_best_solution()
-    print(optimum)
+    # acs = ACS(model)
+    # optimum = acs.find_best_solution()
+    # print(optimum)
+    # return optimum
+
+    brute_force = BruteForce(model)
+    optimum = brute_force.find_best_solution()
+    print("Optimum:", optimum)
     return optimum
 
 
