@@ -14,7 +14,7 @@ FILE_MODEL_IDENTIFYER = ".*(\.dimacs|\.xml)"
 
 FILE_MODEL_DIMACS_IDENTIFYER = ".*(\.dimacs)"
 
-FILE_MODEL_XML_IDENTIFYER = ".*(\.xml)"
+FILE_MODEL_XML_IDENTIFYYER = ".*(\.xml)"
 
 FILE_MODEL_FEATURE_IDENTIFYER = ".*feature([0-9]*).txt"
 
@@ -26,7 +26,7 @@ def timeit(method):
         start = time.time()
         result = method(*args, **kw)
         end = time.time()
-        print('%r (%r, %r) %2.2f sec' % \
+        print('%r (%r, %r) %2.4f sec' % \
               (method.__name__, args, kw, end - start))
         return result
 
@@ -128,6 +128,9 @@ class Solution:
 
     @timeit
     def get_valid_components(self, pheromones_init):
+        """
+        to slow!
+        """
         valid_components = []
         all_features = set(self.model.features)
         ok_features = set((comp.feature for comp in self.components))
@@ -172,6 +175,10 @@ class Solution:
 
     @timeit
     def assess_fitness(self):
+        """
+        assesses fitness
+        to slow!
+        """
         fitness = self.model.features["root"]
 
         for component in self.components:
@@ -217,7 +224,6 @@ class ACS:
         best = None
         start = time.time()
         while time.time() - start < self.max_run_time:
-            population = []
             for n in range(self.pop_size):
                 solution = Solution(self.model)
                 while not solution.is_complete():
@@ -244,6 +250,9 @@ class ACS:
 
     @timeit
     def elitist_component_selection(self, solution, component_selection):
+        """
+        to slow!
+        """
         fitness_old = solution.get_fitness()
         old_components = solution.components
         fitness_map = {}
