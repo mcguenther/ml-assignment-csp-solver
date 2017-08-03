@@ -5,6 +5,7 @@ import pycosat
 import random
 
 from random import randint
+from itertools import combinations
 
 EXIT_ARGUMENT_ERROR = 2
 
@@ -34,7 +35,7 @@ def timeit(method):
 
 
 class Component:
-    def __init__(self, feature, state, pheromone):
+    def __init__(self, feature, state, pheromone=None):
         self.feature = feature
         # untoggled feature: state = 0
         # toggled feature: state = 1
@@ -194,6 +195,67 @@ class Solution:
 
         return fitness
 
+
+class BruteForce:
+    def __init__(self, model):
+        # init
+        self.model = model
+        # do we need to init these components?
+        self.components = []
+        for feature in model.features:
+            component_off = Component(feature, 0)
+            component_on = Component(feature, 1)
+            self.components.append(component_off)
+            self.components.append(component_on)
+        self.max_run_time = 10  # in seconds
+
+    def find_best_solution(self):
+        # main part
+        best = None
+        print()
+        print("Components:")
+        print(self.components)
+        print("Components:", len(self.components))
+        # int division is //
+        all_combinations = combinations(self.components, len(self.components)//2)
+        # print("One combinations:", list(all_combinations)[0])
+        # counter = 0
+        # for i in all_combinations:
+        #     counter += 1
+        # print("Counter combinations:", counter)
+
+        # remove invalid combinations
+        # for combo in all_combinations:
+
+
+        # valid_components = []
+        # all_features = set(self.model.features)
+        # ok_features = set((comp.feature for comp in self.components))
+        # rest_features = all_features - ok_features
+        # rest_features.remove("root")
+
+        # config_literals = list(([comp.to_literal(self.model.name_dict)] for comp in self.components))
+        # constraints = self.model.constraint_list + config_literals
+
+        # # for test_feature in rest_features:
+        # for test_feature in all_features:
+        #     for toggle in (0, 1):
+        #         tmp_component = Component(test_feature, toggle)
+        #         tmp_literal = tmp_component.to_literal(self.model.name_dict)
+        #         constraints.append([tmp_literal])
+
+        #         # show time
+        #         result = pycosat.solve(constraints)
+        #         constraints.pop()
+        #         if result in ("UNSAT", "UNKNOWN"):
+        #             continue
+
+        #         # let's get this party started!
+        #         valid_components.append(tmp_component)
+
+        # return valid_components
+
+        return best
 
 class ACS:
     def __init__(self, model):
@@ -422,9 +484,14 @@ def main(argv):
         print(help_str())
         sys.exit(EXIT_FILE_ERROR)
 
-    acs = ACS(model)
-    optimum = acs.find_best_solution()
-    print(optimum)
+    # acs = ACS(model)
+    # optimum = acs.find_best_solution()
+    # print(optimum)
+    # return optimum
+
+    brute_force = BruteForce(model)
+    optimum = brute_force.find_best_solution()
+    print("Optimum:", optimum)
     return optimum
 
 
