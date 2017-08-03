@@ -3,6 +3,7 @@ import time
 import sys
 import pycosat
 import random
+import xml.etree.ElementTree as ET
 
 from random import randint
 from itertools import combinations
@@ -69,10 +70,59 @@ class Model:
         if is_model_dimacs(vm_path):
             self.name_dict, self.constraint_list = self.read_vm_dimacs(vm_path)
         else:
-            self.vm = self.read_vm_xml(vm_path)
+            self.name_dict, self.constraint_list = self.read_vm_xml(vm_path)
 
+    @timeit
     def read_vm_xml(self, file_model):
-        return True
+        print("it's an XML!")
+        # content = read_file(file_model)
+        # tree = ET.fromstring(content)
+
+        tree = ET.parse(file_model)
+        root = tree.getroot()
+        name2literal = {}
+        name2excluded = {}
+        name2is_optional = {}
+
+        cnf = []
+        for option in root.iter('configurationOption'):
+            key = option.find('name').text
+            is_optional = str2bool(option.find('optional').text)
+            new_literal = len(name2literal) + 1
+            name2literal[key] = new_literal
+            name2is_optional[key] = is_optional
+
+            excluded_options_tag = option.find('excludedOptions')
+            excluded_options = excluded_options_tag.findall("options")
+            if excluded_options:
+                name2excluded[key] = set()
+                for ex_opt in excluded_options:
+                    name2excluded[key].add(ex_opt.text)
+            else:
+                if not is_optional:
+                    cnf.append([new_literal])
+        for key in name2excluded:
+            # try to add restrictions only once per excluded list
+            literal_key = name2literal[key]
+            excluded_ids = []
+            candidate_cnf = []
+            for excluded_name in name2excluded[key]:
+                excluded_id = name2literal[excluded_name]
+                excluded_ids.append(excluded_id)
+                # add key -> excluded_name  <=> -key excluded_id
+                candidate_cnf.append(sorted([-literal_key, -excluded_id]))
+
+            if not name2is_optional[key]:
+                # one of the group needs to be selected
+                all_options = list(excluded_ids)
+                all_options.append(literal_key)
+                candidate_cnf.append(sorted(all_options))
+
+            for candidate in candidate_cnf:
+                if candidate not in cnf:
+                    cnf.append(candidate)
+
+        return name2literal, cnf
 
     @timeit
     def read_vm_dimacs(self, file_model):
@@ -107,6 +157,10 @@ class Model:
         cnf.pop()
 
         return d, cnf
+
+
+def str2bool(val):
+    return val.lower() in ("true", "y", "yes", "t", "1")
 
 
 class Solution:
@@ -297,6 +351,7 @@ class ACS:
                     else:
                         new_component = self.elitist_component_selection(solution, component_selection)
                         solution.append(new_component)
+                print("found a valid solution!")
                 solution = self.hill_climbing(solution)
 
                 if not best or (solution.get_fitness() > best.get_fitness()):
