@@ -14,7 +14,7 @@ FILE_MODEL_IDENTIFYER = ".*(\.dimacs|\.xml)"
 
 FILE_MODEL_DIMACS_IDENTIFYER = ".*(\.dimacs)"
 
-FILE_MODEL_XML_IDENTIFYYER = ".*(\.xml)"
+FILE_MODEL_XML_IDENTIFYER = ".*(\.xml)"
 
 FILE_MODEL_FEATURE_IDENTIFYER = ".*feature([0-9]*).txt"
 
