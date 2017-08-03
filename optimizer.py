@@ -56,6 +56,12 @@ class Component:
     def __repr__(self):
         return self.__str__()
 
+    def __hash__(self):
+        return hash(self.feature) ^ hash(self.state) ^ hash(self.pheromone)
+
+    def __eq__(self, other):
+        return self.feature == other.feature and self.state == other.state and self.pheromone == other.pheromone
+
 
 class VM:
     def __init__(self, dimacs):
@@ -367,7 +373,7 @@ class ACS:
             for component in self.components:
                 component.pheromone = (1 - self.evaporation_rate) * component.pheromone \
                                       + self.evaporation_rate * self.pheromones_init
-                if set(component).issubset(best.components):
+                if component in set(best.components):
                     # TODO: check if formula for elitist pheromone increase is valid
                     component.pheromone = (1 - self.elitist_learning_rate) * component.pheromone \
                                           + self.elitist_learning_rate * best.get_fitness()
