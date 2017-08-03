@@ -194,11 +194,11 @@ class Solution:
         self.has_changed_since_eval = True
 
     def is_complete(self):
-        for feature in self.model.features:
-            feature_set = set(comp.feature for comp in self.components)
-            if feature not in feature_set:
-                return False
-        return True
+        all_features = set(self.model.features)
+        all_features.remove("root")
+        current_features = set(comp.feature for comp in self.components)
+        is_complete = all_features == current_features
+        return is_complete
 
     @timeit
     def get_valid_components(self, pheromones_init):
@@ -314,6 +314,7 @@ class BruteForce:
         print(counter, "solutions")
         print("Best fitness:", best.get_fitness())
         return best
+
 
 class ACS:
     def __init__(self, model):
@@ -560,15 +561,15 @@ def main(argv):
         print(help_str())
         sys.exit(EXIT_FILE_ERROR)
 
-    # acs = ACS(model)
-    # optimum = acs.find_best_solution()
-    # print(optimum)
-    # return optimum
-
-    brute_force = BruteForce(model)
-    optimum = brute_force.find_best_solution()
-    print("Optimum:", optimum)
+    acs = ACS(model)
+    optimum = acs.find_best_solution()
+    print(optimum)
     return optimum
+
+    # brute_force = BruteForce(model)
+    # optimum = brute_force.find_best_solution()
+    # print("Optimum:", optimum)
+    # return optimum
 
 
 if __name__ == "__main__":
