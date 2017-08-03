@@ -228,7 +228,7 @@ class Solution:
 
         return self.fitness
 
-    @timeit
+    # @timeit
     def assess_fitness(self):
         """
         assesses fitness
@@ -257,6 +257,7 @@ class BruteForce:
         # do we need to init these components?
         self.components = []
         for feature in model.features:
+            print(feature)
             component_off = Component(feature, 0)
             component_on = Component(feature, 1)
             self.components.append(component_off)
@@ -267,48 +268,31 @@ class BruteForce:
         # main part
         best = None
         print()
-        print("Components:")
-        print(self.components)
-        print("Components:", len(self.components))
-        # int division is //
-        all_combinations = combinations(self.components, len(self.components)//2)
-        # print("One combinations:", list(all_combinations)[0])
-        # counter = 0
-        # for i in all_combinations:
-        #     counter += 1
-        # print("Counter combinations:", counter)
+        cnf_solutions = pycosat.itersolve(self.model.constraint_list)
 
-        # remove invalid combinations
-        # for combo in all_combinations:
+        counter = 0
+        for sol in cnf_solutions:
+            # print(sol)
+            components = []
+            solution = Solution(self.model, components)
+            print("Init solution:", solution.get_fitness())
+            for number in sol:
+                print("Number:", number)
+                feature_name = next(key for key, value in self.model.name_dict.items() if value == abs(number))
+                toggle = lambda x: (1, 0)[x < 0]
+                new_component = Component(feature_name, toggle(number))
+                print(new_component)
+                components.append(new_component)
+            counter += 1
+            solution = Solution(self.model, components)
+            if not best or (solution.get_fitness() > best.get_fitness()):
+                best = solution
+            print("Solution components:", solution.components)
+            print("Solution fitness:", solution.get_fitness())
+            print()
 
-
-        # valid_components = []
-        # all_features = set(self.model.features)
-        # ok_features = set((comp.feature for comp in self.components))
-        # rest_features = all_features - ok_features
-        # rest_features.remove("root")
-
-        # config_literals = list(([comp.to_literal(self.model.name_dict)] for comp in self.components))
-        # constraints = self.model.constraint_list + config_literals
-
-        # # for test_feature in rest_features:
-        # for test_feature in all_features:
-        #     for toggle in (0, 1):
-        #         tmp_component = Component(test_feature, toggle)
-        #         tmp_literal = tmp_component.to_literal(self.model.name_dict)
-        #         constraints.append([tmp_literal])
-
-        #         # show time
-        #         result = pycosat.solve(constraints)
-        #         constraints.pop()
-        #         if result in ("UNSAT", "UNKNOWN"):
-        #             continue
-
-        #         # let's get this party started!
-        #         valid_components.append(tmp_component)
-
-        # return valid_components
-
+        print(counter, "solutions")
+        print("Best fitness:", best.get_fitness())
         return best
 
 class ACS:
