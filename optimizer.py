@@ -194,10 +194,9 @@ class Solution:
 
     def is_complete(self):
         for feature in self.model.features:
-            feature_gen = (comp.feature for comp in self.components)
-            if feature not in set(feature_gen):
+            feature_set = set(comp.feature for comp in self.components)
+            if feature not in feature_set:
                 return False
-
         return True
 
     @timeit
@@ -248,7 +247,7 @@ class Solution:
 
         return self.fitness
 
-    @timeit
+    # @timeit
     def assess_fitness(self):
         """
         assesses fitness
@@ -281,6 +280,8 @@ class ACS:
         # TODO: check parameters for component selection
         self.hill_climbing_its = 0
         self.elitist_select_prob = 0.5
+        self.tuning_heuristic_selection = 1
+        self.tuning_pheromone_selection = 1
 
         # from the 1997 paper reflecting the impact of the fitness
         self.beta = 2
@@ -344,12 +345,26 @@ class ACS:
         # q = 0.0
         if q <= self.elitist_select_prob:
             # do elitist exploitation
-            best = min(fitness_map, key=fitness_map.get)
+            # TODO check min/max
+            best = max(fitness_map, key=fitness_map.get)
         else:
-            pass
-        # biased exploration
+            des_map = {}
+            for new_comp in component_selection:
+                des_map[new_comp] = self.desirebility(new_comp, fitness_map)
+            best = max(des_map, key=fitness_map.get)
+            # biased exploration
 
         return best
+
+    def desirebility(self, component, val_map):
+        p = component.pheromone
+        # TODO define value of component
+
+        des = pow(p, self.tuning_pheromone_selection)
+        if val_map:
+            val = val_map[component]  # component.value
+            des = des * pow(val, self.tuning_heuristic_selection)
+        return des
 
     def assess_fitness_complete(self, fitness_old, new_comp, solution):
         old_components = solution.components
