@@ -100,7 +100,7 @@ class Model:
             name2is_optional[key] = is_optional
 
             parent_option = option.find('parent')
-            if parent_option.text.strip():
+            if parent_option.text and parent_option.text.strip():
                 parent_id = name2literal[parent_option.text]
                 if parent_id not in parent2children:
                     parent2children[parent_id] = set()
@@ -404,6 +404,7 @@ class ACS:
             des_map = {}
             for new_comp in component_selection:
                 des_map[new_comp] = self.desirebility(new_comp, fitness_map)
+            #TODO add random selection: either geometric or uniform over top p%
             best = max(des_map, key=fitness_map.get)
             # biased exploration
 
