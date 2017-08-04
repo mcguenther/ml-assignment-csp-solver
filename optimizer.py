@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 import re
 import time
 import sys
@@ -65,6 +66,29 @@ class Component:
 class VM:
     def __init__(self, dimacs):
         pass
+
+
+class Visualizer:
+    def __init__(self):
+        self.sequences = {}
+        pass
+
+    def add_sequence(self, sequence_id=0):
+        self.sequences[sequence_id] = []
+
+    def add_solution(self, solution, sequence_id=0):
+        if not self.sequences[sequence_id]:
+            self.add_sequence(sequence_id)
+        self.sequences[sequence_id].append(solution.get_fitness())
+        # plt.plot(self.sequences[sequence_id])
+        # plt.show(block=True)
+
+    def visualize(self, sequence_id=0):
+        costs = self.sequences[sequence_id]
+        print("Best: " + str(min(costs)) + " | Worst: " +
+              str(max(costs)) + " | Avg: " + str(sum(costs) / len(costs)))
+        plt.plot(costs)
+        plt.show(block=True)
 
 
 class Model:
@@ -341,6 +365,7 @@ class ACS:
         self.elitist_select_prob = 0.5
         self.tuning_heuristic_selection = 1
         self.tuning_pheromone_selection = 1
+        self.visualizer = Visualizer()
 
         # from the 1997 paper reflecting the impact of the fitness
         self.beta = 2
@@ -354,12 +379,18 @@ class ACS:
 
         self.max_run_time = 10  # in seconds
 
+    def time_up(self, start):
+        return time.time() - start > self.max_run_time
+
     def find_best_solution(self):
         # main part
         best = None
         start = time.time()
-        while time.time() - start < self.max_run_time:
+        self.visualizer.add_sequence(0)
+        while not self.time_up(start):
             for n in range(self.pop_size):
+                if self.time_up(start):
+                    break
                 solution = Solution(self.model)
                 while not solution.is_complete():
                     component_selection = solution.get_valid_components(self.components)
@@ -370,11 +401,13 @@ class ACS:
                     else:
                         new_component = self.elitist_component_selection(solution, component_selection)
                         solution.append(new_component)
-                #print("found a valid solution!")
+                # print("found a valid solution!")
                 solution = self.hill_climbing(solution)
 
                 if not best or (solution.get_fitness() < best.get_fitness()):
                     best = solution
+            self.visualizer.add_solution(best, 0)
+
             for component in self.components:
                 component.pheromone = (1 - self.evaporation_rate) * component.pheromone \
                                       + self.evaporation_rate * self.pheromones_init
@@ -382,6 +415,7 @@ class ACS:
                     # TODO: check if formula for elitist pheromone increase is valid
                     component.pheromone = (1 - self.elitist_learning_rate) * component.pheromone \
                                           + self.elitist_learning_rate * best.get_fitness()
+        self.visualizer.visualize(0)
         return best
 
     # @timeit
