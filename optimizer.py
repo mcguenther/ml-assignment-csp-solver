@@ -4,6 +4,7 @@ import sys
 import pycosat
 import random
 import xml.etree.ElementTree as ET
+import numpy as np
 from random import randint
 
 EXIT_ARGUMENT_ERROR = 2
@@ -76,7 +77,7 @@ class Model:
         else:
             self.name_dict, self.constraint_list = self.read_vm_xml(vm_path)
 
-    @timeit
+    # @timeit
     def read_vm_xml(self, file_model):
         print("it's an XML!")
         # content = read_file(file_model)
@@ -197,6 +198,12 @@ class Solution:
         self.fitness = None
         self.has_changed_since_eval = True
 
+    def __str__(self):
+        return "Solution( " + str(self.get_fitness()) + " | " + str(self.components) + ")"
+
+    def __repr__(self):
+        return self.__str__()
+
     def is_complete(self):
         all_features = set(self.model.features)
         all_features.remove("root")
@@ -204,8 +211,8 @@ class Solution:
         is_complete = all_features == current_features
         return is_complete
 
-    @timeit
-    def get_valid_components(self, pheromones_init):
+    # @timeit
+    def get_valid_components(self, global_components):
         """
         to slow!
         """
@@ -214,25 +221,24 @@ class Solution:
         ok_features = set((comp.feature for comp in self.components))
         rest_features = all_features - ok_features
         rest_features.remove("root")
+        rest_components = set()
+        for comp in global_components:
+            if comp.feature in rest_features:
+                rest_components.add(comp)
 
         config_literals = list(([comp.to_literal(self.model.name_dict)] for comp in self.components))
         constraints = self.model.constraint_list + config_literals
 
-        for test_feature in rest_features:
-            for toggle in (0, 1):
-                # TODO instead of creating new one, use components field of ACS
-                tmp_component = Component(test_feature, toggle, pheromones_init)
-                tmp_literal = tmp_component.to_literal(self.model.name_dict)
-                constraints.append([tmp_literal])
-
-                # show time
-                result = pycosat.solve(constraints)
-                constraints.pop()
-                if result in ("UNSAT", "UNKNOWN"):
-                    continue
-
-                # let's get this party started!
-                valid_components.append(tmp_component)
+        for comp in rest_components:
+            tmp_literal = comp.to_literal(self.model.name_dict)
+            constraints.append([tmp_literal])
+            # showtime
+            result = pycosat.solve(constraints)
+            constraints.pop()
+            if result in ("UNSAT", "UNKNOWN"):
+                continue
+            # let's get this party started!
+            valid_components.append(comp)
 
         return valid_components
 
@@ -291,7 +297,7 @@ class BruteForce:
             component_on = Component(feature, 1)
             self.components.append(component_off)
             self.components.append(component_on)
-        self.max_run_time = 10  # in seconds
+        self.max_run_time = 5  # in seconds
 
     def find_best_solution(self):
         # main part
@@ -326,8 +332,8 @@ class ACS:
     def __init__(self, model):
         # init
         self.model = model
-        self.pop_size = 5
-        self.elitist_learning_rate = 0.1
+        self.pop_size = 50
+        self.elitist_learning_rate = 0.00005
         self.evaporation_rate = 0.1
         self.pheromones_init = 0.5
         # TODO: check parameters for component selection
@@ -356,8 +362,7 @@ class ACS:
             for n in range(self.pop_size):
                 solution = Solution(self.model)
                 while not solution.is_complete():
-                    # TODO pass self.components instead of self.pheromones_init
-                    component_selection = solution.get_valid_components(self.pheromones_init)
+                    component_selection = solution.get_valid_components(self.components)
                     if not component_selection:
                         print("ended up with invalid solution; starting over")
                         solution.clear()
@@ -365,7 +370,7 @@ class ACS:
                     else:
                         new_component = self.elitist_component_selection(solution, component_selection)
                         solution.append(new_component)
-                print("found a valid solution!")
+                #print("found a valid solution!")
                 solution = self.hill_climbing(solution)
 
                 if not best or (solution.get_fitness() < best.get_fitness()):
@@ -379,19 +384,20 @@ class ACS:
                                           + self.elitist_learning_rate * best.get_fitness()
         return best
 
-    @timeit
+    # @timeit
     def elitist_component_selection(self, solution, component_selection):
         """
-        to slow!
+        too slow!
         """
         fitness_old = solution.get_fitness()
-        old_components = solution.components
         fitness_map = {}
-        best = None
         for new_comp in component_selection:
             # fitness_delta = self.assess_fitness_complete(fitness_old, new_comp, old_components)
             fitness_delta = self.assess_fitness_complete(fitness_old, new_comp, solution)
-            score = new_comp.pheromone * pow(1 / fitness_delta, self.beta)
+            if fitness_delta == 0:
+                score = sys.maxsize
+            else:
+                score = new_comp.pheromone * pow(1 / fitness_delta, self.beta)
             fitness_map[new_comp] = score
 
         q = random.random()
@@ -404,8 +410,10 @@ class ACS:
             des_map = {}
             for new_comp in component_selection:
                 des_map[new_comp] = self.desirebility(new_comp, fitness_map)
-            # TODO add random selection: either geometric or uniform over top p%
-            best = max(des_map, key=fitness_map.get)
+            best_list = sorted(des_map, key=fitness_map.get)
+            index = np.random.geometric(p=0.4)
+            index = min(index, (len(best_list) - 1))
+            best = best_list[index]
             # biased exploration
 
         return best
