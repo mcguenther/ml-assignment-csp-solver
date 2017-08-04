@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import matplotlib.pylab as pylab
 import re
 import time
 import sys
@@ -70,24 +71,44 @@ class VM:
 
 class Visualizer:
     def __init__(self):
-        self.sequences = {}
-        pass
+        self.sequences = []
+        plt.ion()
+        self.fig = plt.figure()
+        self.last_annotation = None
+        self.ax = self.fig.add_subplot(111)
+        self.ax.set_title("Cost of best candidates over past epochs")
+        self.ax.set_xlabel('#epoch')
+        self.ax.set_ylabel('cost of best solution')
+        self.plot_data, = self.ax.plot(self.sequences)
+        pylab.pause(1.e-8)
 
-    def add_sequence(self, sequence_id=0):
-        self.sequences[sequence_id] = []
+    def add_sequence(self):
+        self.sequences = []
 
-    def add_solution(self, solution, sequence_id=0):
-        if not self.sequences[sequence_id]:
-            self.add_sequence(sequence_id)
-        self.sequences[sequence_id].append(solution.get_fitness())
-        # plt.plot(self.sequences[sequence_id])
+    def add_solution(self, solution):
+        if not self.sequences:
+            self.add_sequence()
+        self.sequences.append(solution.get_fitness())
+        self.plot_data.set_data(np.arange(len(self.sequences)), self.sequences)
+
+        if self.last_annotation:
+            self.last_annotation.remove()
+        xy = (len(self.sequences) - 2, self.sequences[-1] + 1)
+        self.last_annotation = self.ax.annotate(self.sequences[-1], xy=xy, textcoords='data')
+
+        self.ax.plot(self.sequences, "b-")
+
+        pylab.pause(1.e-8)
+        # plt.plot(self.sequences)
+        # plt.plot(self.sequences)
         # plt.show(block=True)
 
-    def visualize(self, sequence_id=0):
-        costs = self.sequences[sequence_id]
+    def visualize(self):
+        costs = self.sequences
         print("Best: " + str(min(costs)) + " | Worst: " +
               str(max(costs)) + " | Avg: " + str(sum(costs) / len(costs)))
-        plt.plot(costs)
+        # plt.plot(costs)
+        # self.fig.show()
         plt.show(block=True)
 
 
@@ -356,8 +377,8 @@ class ACS:
     def __init__(self, model):
         # init
         self.model = model
-        self.pop_size = 50
-        self.elitist_learning_rate = 0.00005
+        self.pop_size = 20
+        self.elitist_learning_rate = 0.00006
         self.evaporation_rate = 0.1
         self.pheromones_init = 0.5
         # TODO: check parameters for component selection
@@ -377,7 +398,7 @@ class ACS:
             self.components.append(component_off)
             self.components.append(component_on)
 
-        self.max_run_time = 10  # in seconds
+        self.max_run_time = 5  # in seconds
 
     def time_up(self, start):
         return time.time() - start > self.max_run_time
@@ -386,7 +407,7 @@ class ACS:
         # main part
         best = None
         start = time.time()
-        self.visualizer.add_sequence(0)
+        self.visualizer.add_sequence()
         while not self.time_up(start):
             for n in range(self.pop_size):
                 if self.time_up(start):
@@ -406,7 +427,7 @@ class ACS:
 
                 if not best or (solution.get_fitness() < best.get_fitness()):
                     best = solution
-            self.visualizer.add_solution(best, 0)
+            self.visualizer.add_solution(best)
 
             for component in self.components:
                 component.pheromone = (1 - self.evaporation_rate) * component.pheromone \
@@ -415,7 +436,7 @@ class ACS:
                     # TODO: check if formula for elitist pheromone increase is valid
                     component.pheromone = (1 - self.elitist_learning_rate) * component.pheromone \
                                           + self.elitist_learning_rate * best.get_fitness()
-        self.visualizer.visualize(0)
+        self.visualizer.visualize()
         return best
 
     # @timeit
