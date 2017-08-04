@@ -4,9 +4,7 @@ import sys
 import pycosat
 import random
 import xml.etree.ElementTree as ET
-
 from random import randint
-from itertools import combinations
 
 EXIT_ARGUMENT_ERROR = 2
 
@@ -263,13 +261,18 @@ class Solution:
         fitness = self.model.features["root"]
 
         for component in self.components:
-            feature = component.feature
-            value = self.model.features[feature]
-            fitness += value
+            if component.state:
+                feature = component.feature
+                value = self.model.features[feature]
+                fitness += value
 
         for interaction_features in self.model.interactions:
-            feature_generator = (comp.feature for comp in self.components)
-            if set(interaction_features).issubset(set(feature_generator)):
+            matches = 0
+            for comp in self.components:
+                if comp.feature in interaction_features and comp.state == 1:
+                    matches += 1
+
+            if matches == len(interaction_features):
                 value = self.model.interactions[interaction_features]
                 fitness += value
 
@@ -298,9 +301,7 @@ class BruteForce:
 
         counter = 0
         for sol in cnf_solutions:
-            # print(sol)
-            components = []
-            solution = Solution(self.model, components)
+            solution = Solution(self.model)
             print("Init solution:", solution.get_fitness())
             for number in sol:
                 print("Number:", number)
@@ -308,10 +309,9 @@ class BruteForce:
                 toggle = lambda x: (1, 0)[x < 0]
                 new_component = Component(feature_name, toggle(number))
                 print(new_component)
-                components.append(new_component)
+                solution.append(new_component)
             counter += 1
-            solution = Solution(self.model, components)
-            if not best or (solution.get_fitness() > best.get_fitness()):
+            if not best or (solution.get_fitness() < best.get_fitness()):
                 best = solution
             print("Solution components:", solution.components)
             print("Solution fitness:", solution.get_fitness())
@@ -368,7 +368,7 @@ class ACS:
                 print("found a valid solution!")
                 solution = self.hill_climbing(solution)
 
-                if not best or (solution.get_fitness() > best.get_fitness()):
+                if not best or (solution.get_fitness() < best.get_fitness()):
                     best = solution
             for component in self.components:
                 component.pheromone = (1 - self.evaporation_rate) * component.pheromone \
@@ -404,7 +404,7 @@ class ACS:
             des_map = {}
             for new_comp in component_selection:
                 des_map[new_comp] = self.desirebility(new_comp, fitness_map)
-            #TODO add random selection: either geometric or uniform over top p%
+            # TODO add random selection: either geometric or uniform over top p%
             best = max(des_map, key=fitness_map.get)
             # biased exploration
 
