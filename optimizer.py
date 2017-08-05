@@ -87,7 +87,6 @@ class Visualizer:
         self.ax_pheromone_history = self.fig.add_subplot(212)
         self.init_pheromone_graph()
 
-
         self.fig.tight_layout()
         # self.fig.subplots_adjust(left=None, bottom=None, right=None, top=None, wspace=None, hspace=10)
         pylab.pause(1.e-8)
@@ -149,13 +148,19 @@ class Visualizer:
 
     def update_pheromone_graph_forced(self, components):
         pheromones = list((comp.pheromone for comp in components))
-        # self.plot_pheromones.set_data(np.arange(len(pheromones)), pheromones)
-        # self.last_annotation = self.ax_cost_history.annotate(self.sequences[-1], xy=xy, textcoords='data')
+        comp_names = list((comp.feature + "=" + str(comp.state) for comp in components))
+        num_pheromones = len(pheromones)
         self.ax_pheromone_history.clear()
+        # Set number of ticks for x-axis
+        # self.ax_pheromone_history.xticks(np.arange(num_pheromones), comp_names, rotation='vertical')
+        self.ax_pheromone_history.set_xticks(np.arange(num_pheromones))
+        # Set ticks labels for x-axis
+        self.ax_pheromone_history.set_xticklabels(comp_names, rotation='vertical', fontsize=8)
+
         self.init_pheromone_graph()
-        self.ax_pheromone_history.bar(np.arange(len(pheromones)), pheromones)
+        self.ax_pheromone_history.bar(np.arange(num_pheromones), pheromones)
+        self.fig.tight_layout()
         pylab.pause(1.e-8)
-        # self.plot_pheromones
 
 
 class DummyVisualizer:
