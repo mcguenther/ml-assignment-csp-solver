@@ -406,7 +406,7 @@ class BruteForce:
         # do we need to init these components?
         self.components = []
         for feature in model.features:
-            print(feature)
+            #print(feature)
             component_off = Component(feature, 0)
             component_on = Component(feature, 1)
             self.components.append(component_off)
@@ -417,19 +417,19 @@ class BruteForce:
     def find_best_solution(self):
         # main part
         best = None
-        print()
+        #print()
         cnf_solutions = pycosat.itersolve(self.model.constraint_list)
 
         counter = 0
         for sol in cnf_solutions:
             solution = Solution(self.model)
-            print("Init solution:", solution.get_fitness())
+            #print("Init solution:", solution.get_fitness())
             for number in sol:
-                print("Number:", number)
+                #print("Number:", number)
                 feature_name = next(key for key, value in self.model.name_dict.items() if value == abs(number))
                 toggle = lambda x: (1, 0)[x < 0]
                 new_component = Component(feature_name, toggle(number))
-                print(new_component)
+                #print(new_component)
                 solution.append(new_component)
             counter += 1
             if not best or (solution.get_fitness() < best.get_fitness()):
@@ -437,12 +437,12 @@ class BruteForce:
                 self.visualizer.add_solution_forced(solution)
             else:
                 self.visualizer.add_solution(solution)
-            print("Solution components:", solution.components)
-            print("Solution fitness:", solution.get_fitness())
-            print()
+            #print("Solution components:", solution.components)
+            #print("Solution fitness:", solution.get_fitness())
+            #print()
 
-        print(counter, "solutions")
-        print("Best fitness:", best.get_fitness())
+        #print(counter, "solutions")
+        #print("Best fitness:", best.get_fitness())
         self.visualizer.visualize()
         return best
 
@@ -733,7 +733,7 @@ def main(argv):
         acs = ACS(model, visualizer)
         optimum = acs.find_best_solution(seconds=20)
 
-    print("Optimum:", optimum)
+    print("Optimum: " + str(optimum))
     return optimum
 
 
