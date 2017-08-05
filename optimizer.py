@@ -70,25 +70,42 @@ class VM:
 
 
 class Visualizer:
-    def __init__(self, sleep_cycles=10):
+    def __init__(self, sleep_cycles=10, sleep_cycles_pheromones=None):
+        if not sleep_cycles_pheromones:
+            sleep_cycles_pheromones = sleep_cycles
         self.sequences = []
         plt.ion()
         self.fig = plt.figure()
+
         self.last_annotation = None
-        self.ax = self.fig.add_subplot(111)
-        self.ax.set_title("Cost of best candidates over past epochs")
-        self.ax.set_xlabel('#sample')
-        self.ax.set_ylabel('cost of best solution')
-        self.plot_data, = self.ax.plot(self.sequences)
+        self.ax_cost_history = self.fig.add_subplot(211)
+        self.ax_cost_history.set_title("Cost of best candidates over past epochs")
+        self.ax_cost_history.set_xlabel('#sample')
+        self.ax_cost_history.set_ylabel('cost of best solution')
+        self.plot_data, = self.ax_cost_history.plot(self.sequences)
+
+        self.ax_pheromone_history = self.fig.add_subplot(212)
+        self.init_pheromone_graph()
+
+
+        self.fig.tight_layout()
+        # self.fig.subplots_adjust(left=None, bottom=None, right=None, top=None, wspace=None, hspace=10)
         pylab.pause(1.e-8)
-        self.sleep_cycles = sleep_cycles
+        self.sleep_cycles_costs = sleep_cycles
         self.sleep_state = 1
+        self.sleep_state_pheromones = 1
+        self.sleep_cycles_pheromones = sleep_cycles_pheromones
+
+    def init_pheromone_graph(self):
+        self.ax_pheromone_history.set_title("Current values of pheromones")
+        self.ax_pheromone_history.set_xlabel('component id')
+        self.ax_pheromone_history.set_ylabel('pheromone value')
 
     def add_sequence(self):
         self.sequences = []
 
     def add_solution(self, solution):
-        if self.sleep_state % (self.sleep_cycles + 1) == 0:
+        if self.sleep_state % (self.sleep_cycles_costs + 1) == 0:
             self.add_solution_forced(solution)
             self.sleep_state = 1
         else:
@@ -104,9 +121,10 @@ class Visualizer:
         self.plot_data.set_data(np.arange(len(self.sequences)), self.sequences)
         if self.last_annotation:
             self.last_annotation.remove()
+
         xy = (len(self.sequences) - 2, self.sequences[-1] + 1)
-        self.last_annotation = self.ax.annotate(self.sequences[-1], xy=xy, textcoords='data')
-        self.ax.plot(self.sequences, "b-")
+        self.last_annotation = self.ax_cost_history.annotate(self.sequences[-1], xy=xy, textcoords='data')
+        self.ax_cost_history.plot(self.sequences, "b-")
         pylab.pause(1.e-8)
 
     def visualize(self):
@@ -116,8 +134,28 @@ class Visualizer:
         self.update_cost_graph()
         plt.show(block=True)
 
-    def set_sleep_time(self, x):
-        self.sleep_cycles = x
+    def set_sleep_time_costs(self, x):
+        self.sleep_cycles_costs = x
+
+    def set_sleep_time_pheromones(self, x):
+        self.sleep_cycles_pheromones = x
+
+    def update_pheromone_graph(self, components):
+        if self.sleep_state_pheromones % (self.sleep_cycles_pheromones + 1) == 0:
+            self.update_pheromone_graph_forced(components)
+            self.sleep_state_pheromones = 1
+        else:
+            self.sleep_state_pheromones += 1
+
+    def update_pheromone_graph_forced(self, components):
+        pheromones = list((comp.pheromone for comp in components))
+        # self.plot_pheromones.set_data(np.arange(len(pheromones)), pheromones)
+        # self.last_annotation = self.ax_cost_history.annotate(self.sequences[-1], xy=xy, textcoords='data')
+        self.ax_pheromone_history.clear()
+        self.init_pheromone_graph()
+        self.ax_pheromone_history.bar(np.arange(len(pheromones)), pheromones)
+        pylab.pause(1.e-8)
+        # self.plot_pheromones
 
 
 class DummyVisualizer:
@@ -136,7 +174,10 @@ class DummyVisualizer:
     def visualize(self):
         pass
 
-    def set_sleep_time(self, x):
+    def set_sleep_time_costs(self, x):
+        pass
+
+    def set_sleep_time_pheromones(self, x):
         pass
 
 
@@ -465,8 +506,10 @@ class ACS:
                 if not best or (solution.get_fitness() < best.get_fitness()):
                     best = solution
                     self.visualizer.add_solution_forced(solution)
+                    self.visualizer.update_pheromone_graph_forced(self.components)
                 else:
                     self.visualizer.add_solution(solution)
+                    self.visualizer.update_pheromone_graph(self.components)
 
             for component in self.components:
                 component.pheromone = (1 - self.evaporation_rate) * component.pheromone \
@@ -681,13 +724,14 @@ def main(argv):
         visualizer = DummyVisualizer()
 
     if do_brute_force:
-        visualizer.set_sleep_time(50)
+        visualizer.set_sleep_time_costs(50)
         brute_force = BruteForce(model, visualizer)
         optimum = brute_force.find_best_solution()
     else:
-        visualizer.set_sleep_time(50)
+        visualizer.set_sleep_time_costs(50)
+        visualizer.set_sleep_time_pheromones(10)
         acs = ACS(model, visualizer)
-        optimum = acs.find_best_solution(seconds=60)
+        optimum = acs.find_best_solution(seconds=20)
 
     print("Optimum:", optimum)
     return optimum
