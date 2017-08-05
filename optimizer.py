@@ -121,8 +121,14 @@ class Visualizer:
         if self.last_annotation:
             self.last_annotation.remove()
 
-        xy = (len(self.sequences) - 2, self.sequences[-1] + 1)
-        self.last_annotation = self.ax_cost_history.annotate(self.sequences[-1], xy=xy, textcoords='data')
+        # xy = (len(self.sequences) - 2, self.sequences[-1] + 1)
+        # self.last_annotation = self.ax_cost_history.annotate(self.sequences[-1], xy=xy, textcoords='data')
+
+        min_index = self.sequences.index(min(self.sequences))
+        xy = (min_index, self.sequences[min_index] + 1)
+        self.last_annotation = self.ax_cost_history.annotate(round(self.sequences[min_index], 2),
+                                                             xy=xy, textcoords='data',
+                                                             bbox=dict(boxstyle="round", fc="0.8"))
         self.ax_cost_history.plot(self.sequences, "b-")
         pylab.pause(1.e-8)
 
