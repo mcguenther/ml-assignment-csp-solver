@@ -89,26 +89,23 @@ class Visualizer:
         if not self.sequences:
             self.add_sequence()
         self.sequences.append(solution.get_fitness())
-        self.plot_data.set_data(np.arange(len(self.sequences)), self.sequences)
+        if len(self.sequences)%10 == 0:
+            self.update_cost_graph()
 
+    def update_cost_graph(self):
+        self.plot_data.set_data(np.arange(len(self.sequences)), self.sequences)
         if self.last_annotation:
             self.last_annotation.remove()
         xy = (len(self.sequences) - 2, self.sequences[-1] + 1)
         self.last_annotation = self.ax.annotate(self.sequences[-1], xy=xy, textcoords='data')
-
         self.ax.plot(self.sequences, "b-")
-
         pylab.pause(1.e-8)
-        # plt.plot(self.sequences)
-        # plt.plot(self.sequences)
-        # plt.show(block=True)
 
     def visualize(self):
         costs = self.sequences
         print("Best: " + str(min(costs)) + " | Worst: " +
               str(max(costs)) + " | Avg: " + str(sum(costs) / len(costs)))
-        # plt.plot(costs)
-        # self.fig.show()
+        self.update_cost_graph()
         plt.show(block=True)
 
 
