@@ -70,27 +70,35 @@ class VM:
 
 
 class Visualizer:
-    def __init__(self):
+    def __init__(self, sleep_cycles=10):
         self.sequences = []
         plt.ion()
         self.fig = plt.figure()
         self.last_annotation = None
         self.ax = self.fig.add_subplot(111)
         self.ax.set_title("Cost of best candidates over past epochs")
-        self.ax.set_xlabel('#epoch')
+        self.ax.set_xlabel('#sample')
         self.ax.set_ylabel('cost of best solution')
         self.plot_data, = self.ax.plot(self.sequences)
         pylab.pause(1.e-8)
+        self.sleep_cycles = sleep_cycles
+        self.sleep_state = 1
 
     def add_sequence(self):
         self.sequences = []
 
     def add_solution(self, solution):
+        if self.sleep_state % (self.sleep_cycles + 1) == 0:
+            self.add_solution_forced(solution)
+            self.sleep_state = 1
+        else:
+            self.sleep_state += 1
+
+    def add_solution_forced(self, solution):
         if not self.sequences:
             self.add_sequence()
         self.sequences.append(solution.get_fitness())
-        if len(self.sequences)%10 == 0:
-            self.update_cost_graph()
+        self.update_cost_graph()
 
     def update_cost_graph(self):
         self.plot_data.set_data(np.arange(len(self.sequences)), self.sequences)
@@ -107,6 +115,29 @@ class Visualizer:
               str(max(costs)) + " | Avg: " + str(sum(costs) / len(costs)))
         self.update_cost_graph()
         plt.show(block=True)
+
+    def set_sleep_time(self, x):
+        self.sleep_cycles = x
+
+
+class DummyVisualizer:
+    def __init__(self):
+        pass
+
+    def add_sequence(self):
+        pass
+
+    def add_solution(self, solution):
+        pass
+
+    def add_solution_forced(self, solution):
+        pass
+
+    def visualize(self):
+        pass
+
+    def set_sleep_time(self, x):
+        pass
 
 
 class Model:
@@ -328,7 +359,7 @@ class Solution:
 
 
 class BruteForce:
-    def __init__(self, model):
+    def __init__(self, model, visualizer):
         # init
         self.model = model
         # do we need to init these components?
@@ -340,6 +371,7 @@ class BruteForce:
             self.components.append(component_off)
             self.components.append(component_on)
         self.max_run_time = 5  # in seconds
+        self.visualizer = visualizer
 
     def find_best_solution(self):
         # main part
@@ -361,17 +393,21 @@ class BruteForce:
             counter += 1
             if not best or (solution.get_fitness() < best.get_fitness()):
                 best = solution
+                self.visualizer.add_solution_forced(solution)
+            else:
+                self.visualizer.add_solution(solution)
             print("Solution components:", solution.components)
             print("Solution fitness:", solution.get_fitness())
             print()
 
         print(counter, "solutions")
         print("Best fitness:", best.get_fitness())
+        self.visualizer.visualize()
         return best
 
 
 class ACS:
-    def __init__(self, model):
+    def __init__(self, model, visualizer):
         # init
         self.model = model
         self.pop_size = 20
@@ -383,7 +419,7 @@ class ACS:
         self.elitist_select_prob = 0.5
         self.tuning_heuristic_selection = 1
         self.tuning_pheromone_selection = 1
-        self.visualizer = Visualizer()
+        self.visualizer = visualizer
 
         # from the 1997 paper reflecting the impact of the fitness
         self.beta = 2
@@ -395,19 +431,23 @@ class ACS:
             self.components.append(component_off)
             self.components.append(component_on)
 
-        self.max_run_time = 5  # in seconds
+        self.max_run_time = 10  # in seconds
 
-    def time_up(self, start):
-        return time.time() - start > self.max_run_time
+    def time_up(self, start, seconds=None):
+        if not seconds:
+            seconds = self.max_run_time
+        return time.time() - start > seconds
 
-    def find_best_solution(self):
+    def find_best_solution(self, seconds=None):
+        if not seconds:
+            seconds = self.max_run_time
         # main part
         best = None
         start = time.time()
         self.visualizer.add_sequence()
-        while not self.time_up(start):
+        while not self.time_up(start, seconds):
             for n in range(self.pop_size):
-                if self.time_up(start):
+                if self.time_up(start, seconds):
                     break
                 solution = Solution(self.model)
                 while not solution.is_complete():
@@ -424,7 +464,9 @@ class ACS:
 
                 if not best or (solution.get_fitness() < best.get_fitness()):
                     best = solution
-            self.visualizer.add_solution(best)
+                    self.visualizer.add_solution_forced(solution)
+                else:
+                    self.visualizer.add_solution(solution)
 
             for component in self.components:
                 component.pheromone = (1 - self.evaporation_rate) * component.pheromone \
@@ -589,6 +631,8 @@ def parse_args(argv):
     file_model_feature = ""
     file_model_interations = ""
     found_options = False
+    do_brute_force = False
+    do_visualization = False
     for (i, arg) in enumerate(argv):
         if arg != "Optimize":
             if is_model(arg):
@@ -597,6 +641,10 @@ def parse_args(argv):
                 file_model_feature = arg
             elif is_model_interactions(arg):
                 file_model_interations = arg
+            elif arg == "brute":
+                do_brute_force = True
+            elif arg == "visualize":
+                do_visualization = True
             else:
                 print("Unsupported File Name: " + arg)
 
@@ -604,20 +652,19 @@ def parse_args(argv):
         found_options = True
 
     return found_options, file_model, file_model_feature, \
-           file_model_interations
+           file_model_interations, do_brute_force, do_visualization
 
 
 def main(argv):
     # first read terminal arguments
-    found_options, file_model, file_model_feature, file_model_interations \
-        = parse_args(argv)
+    found_options, file_model, file_model_feature, \
+    file_model_interations, do_brute_force, do_visualization = parse_args(argv)
 
     if not found_options:
         print(help_str())
         sys.exit(EXIT_ARGUMENT_ERROR)
 
     print("Reading Files")
-
     features = read_features(file_model_feature)
     interactions = read_interactions(file_model_interations)
     print(interactions)
@@ -628,15 +675,22 @@ def main(argv):
         print(help_str())
         sys.exit(EXIT_FILE_ERROR)
 
-    acs = ACS(model)
-    optimum = acs.find_best_solution()
-    print(optimum)
-    return optimum
+    if do_visualization:
+        visualizer = Visualizer()
+    else:
+        visualizer = DummyVisualizer()
 
-    # brute_force = BruteForce(model)
-    # optimum = brute_force.find_best_solution()
-    # print("Optimum:", optimum)
-    # return optimum
+    if do_brute_force:
+        visualizer.set_sleep_time(50)
+        brute_force = BruteForce(model, visualizer)
+        optimum = brute_force.find_best_solution()
+    else:
+        visualizer.set_sleep_time(50)
+        acs = ACS(model, visualizer)
+        optimum = acs.find_best_solution(seconds=60)
+
+    print("Optimum:", optimum)
+    return optimum
 
 
 if __name__ == "__main__":
