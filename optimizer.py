@@ -7,7 +7,11 @@ import pycosat
 import random
 import xml.etree.ElementTree as ET
 import numpy as np
+import bisect
+import csv
+import os
 from random import randint
+from operator import itemgetter
 
 EXIT_ARGUMENT_ERROR = 2
 
@@ -219,6 +223,7 @@ class DummyVisualizer:
 
 class Model:
     def __init__(self, vm_path, features, interactions):
+        self.vm_path = vm_path
         self.features = features
         self.interactions = interactions
 
@@ -451,6 +456,7 @@ class BruteForce:
         best = None
         # print()
         cnf_solutions = pycosat.itersolve(self.model.constraint_list)
+        top_200 = []
 
         counter = 0
         for sol in cnf_solutions:
@@ -463,18 +469,36 @@ class BruteForce:
                 new_component = Component(feature_name, toggle(number), self.model)
                 # print(new_component)
                 solution.append(new_component)
-            counter += 1
-            if not best or (solution.get_fitness() < best.get_fitness()):
+            # counter += 1
+
+            # append top 200 list
+            sol_fitness = solution.get_fitness()
+            top_200.append((sol_fitness, solution))
+            top_200.sort(key = itemgetter(0))
+            if len(top_200) > 200:
+                top_200.pop()
+
+            if not best or (sol_fitness < best.get_fitness()):
                 best = solution
                 self.visualizer.add_solution_forced(solution)
             else:
                 self.visualizer.add_solution(solution)
-                # print("Solution components:", solution.components)
-                # print("Solution fitness:", solution.get_fitness())
-                # print()
 
         # print(counter, "solutions")
         # print("Best fitness:", best.get_fitness())
+        
+        # Soll jede Zeile den Namen der jeweiligen Componente enthalten?
+        # Oder reicht das so?
+
+        #  save top 200 list to csv file
+        vm = os.path.splitext(os.path.basename(self.model.vm_path))[0]
+        file = "brute_" + vm + ".csv"
+        with open(file, "w") as csv_file:
+            out = csv.writer(csv_file, quoting=csv.QUOTE_ALL)
+            out.writerow(["Fitness", "Components"])
+            for i in range(200):
+                out.writerow(top_200[i])
+
         self.visualizer.visualize()
         return best
 
@@ -527,6 +551,7 @@ class ACS:
             seconds = self.max_run_time
         # main part
         best = None
+        top_10 = []
         start = time.time()
         self.visualizer.add_sequence()
         while not self.time_up(start, seconds):
@@ -547,7 +572,14 @@ class ACS:
                 # print("found a valid solution!")
                 solution = self.hill_climbing(solution)
 
-                if not best or (solution.get_fitness() < best.get_fitness()):
+                # append top 10 list
+                sol_fitness = solution.get_fitness()
+                top_10.append((sol_fitness, solution))
+                top_10.sort(key = itemgetter(0))
+                if len(top_10) > 10:
+                   top_10.pop()
+
+                if not best or (sol_fitness < best.get_fitness()):
                     best = solution
                     self.visualizer.add_solution_forced(solution)
                     self.visualizer.update_pheromone_graph_forced(self.components)
@@ -563,6 +595,14 @@ class ACS:
                                           + self.elitist_learning_rate * best.get_fitness()
             self.visualizer.update_pheromone_graph(self.components)
         self.visualizer.visualize()
+        #  save top 10 list to csv file
+        vm = os.path.splitext(os.path.basename(self.model.vm_path))[0]
+        file = "acs_" + vm + ".csv"
+        with open(file, "w") as csv_file:
+            out = csv.writer(csv_file, quoting=csv.QUOTE_ALL)
+            out.writerow(["Fitness", "Components"])
+            for i in range(200):
+                out.writerow(top_10[i])
         return best
 
     # @timeit
