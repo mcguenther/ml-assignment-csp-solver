@@ -417,7 +417,7 @@ class BruteForce:
         # do we need to init these components?
         self.components = []
         for feature in model.features:
-            #print(feature)
+            # print(feature)
             component_off = Component(feature, 0)
             component_on = Component(feature, 1)
             self.components.append(component_off)
@@ -428,19 +428,19 @@ class BruteForce:
     def find_best_solution(self):
         # main part
         best = None
-        #print()
+        # print()
         cnf_solutions = pycosat.itersolve(self.model.constraint_list)
 
         counter = 0
         for sol in cnf_solutions:
             solution = Solution(self.model)
-            #print("Init solution:", solution.get_fitness())
+            # print("Init solution:", solution.get_fitness())
             for number in sol:
-                #print("Number:", number)
+                # print("Number:", number)
                 feature_name = next(key for key, value in self.model.name_dict.items() if value == abs(number))
                 toggle = lambda x: (1, 0)[x < 0]
                 new_component = Component(feature_name, toggle(number))
-                #print(new_component)
+                # print(new_component)
                 solution.append(new_component)
             counter += 1
             if not best or (solution.get_fitness() < best.get_fitness()):
@@ -448,12 +448,12 @@ class BruteForce:
                 self.visualizer.add_solution_forced(solution)
             else:
                 self.visualizer.add_solution(solution)
-            #print("Solution components:", solution.components)
-            #print("Solution fitness:", solution.get_fitness())
-            #print()
+                # print("Solution components:", solution.components)
+                # print("Solution fitness:", solution.get_fitness())
+                # print()
 
-        #print(counter, "solutions")
-        #print("Best fitness:", best.get_fitness())
+        # print(counter, "solutions")
+        # print("Best fitness:", best.get_fitness())
         self.visualizer.visualize()
         return best
 
@@ -462,14 +462,16 @@ class ACS:
     def __init__(self, model, visualizer):
         # init
         self.model = model
-        self.pop_size = 20
-        self.elitist_learning_rate = 0.00006
+        self.pop_size = 10
+        # self.elitist_learning_rate = 0.00006
+        self.elitist_learning_rate = 0.00001
+        # self.evaporation_rate = 0.1
         self.evaporation_rate = 0.1
-        self.pheromones_init = 0.5
+        self.pheromones_init = 0.2
         # TODO: check parameters for component selection
         self.hill_climbing_its = 0
-        self.elitist_select_prob = 0.5
-        self.tuning_heuristic_selection = 1
+        self.elitist_select_prob = 0.9
+        self.tuning_heuristic_selection = 5
         self.tuning_pheromone_selection = 1
         self.visualizer = visualizer
 
@@ -483,7 +485,7 @@ class ACS:
             self.components.append(component_off)
             self.components.append(component_on)
 
-        self.max_run_time = 10  # in seconds
+        self.max_run_time = 5  # in seconds
 
     def time_up(self, start, seconds=None):
         if not seconds:
@@ -520,7 +522,6 @@ class ACS:
                     self.visualizer.update_pheromone_graph_forced(self.components)
                 else:
                     self.visualizer.add_solution(solution)
-                    self.visualizer.update_pheromone_graph(self.components)
 
             for component in self.components:
                 component.pheromone = (1 - self.evaporation_rate) * component.pheromone \
@@ -529,6 +530,7 @@ class ACS:
                     # TODO: check if formula for elitist pheromone increase is valid
                     component.pheromone = (1 - self.elitist_learning_rate) * component.pheromone \
                                           + self.elitist_learning_rate * best.get_fitness()
+            self.visualizer.update_pheromone_graph(self.components)
         self.visualizer.visualize()
         return best
 
@@ -542,38 +544,35 @@ class ACS:
         for new_comp in component_selection:
             # fitness_delta = self.assess_fitness_complete(fitness_old, new_comp, old_components)
             fitness_delta = self.assess_fitness_complete(fitness_old, new_comp, solution)
-            if fitness_delta == 0:
-                score = sys.maxsize
-            else:
-                score = new_comp.pheromone * pow(1 / fitness_delta, self.beta)
-            fitness_map[new_comp] = score
+            fitness_map[new_comp] = -fitness_delta
 
+        min_val = min(list(fitness_map.values()))
+        for comp in fitness_map:
+            fitness_map[comp] = (fitness_map[comp] - min_val)  # / (max_val - min_val)
         q = random.random()
-        # q = 0.0
+
         if q <= self.elitist_select_prob:
             # do elitist exploitation
             # TODO check min/max
-            best = max(fitness_map, key=fitness_map.get)
-        else:
             des_map = {}
-            for new_comp in component_selection:
-                des_map[new_comp] = self.desirebility(new_comp, fitness_map)
-            best_list = sorted(des_map, key=fitness_map.get)
-            index = np.random.geometric(p=0.4)
-            index = min(index, (len(best_list) - 1))
-            best = best_list[index]
+            for comp in fitness_map:
+                des_map[comp] = self.desirebility(comp, fitness_map[comp], pheromone_exp=1)
+            best = max(des_map, key=des_map.get)
+        else:
+            des_vec_function = np.vectorize(self.desirebility)
+            des = list(des_vec_function(np.array(list(fitness_map.keys())), np.array(list(fitness_map.values()))))
+            sum_des = sum(des)
+            des = np.array(des) / sum_des
+            best = np.random.choice(component_selection, p=des)
             # biased exploration
 
         return best
 
-    def desirebility(self, component, val_map):
+    def desirebility(self, component, value, pheromone_exp=None):
+        if not pheromone_exp:
+            pheromone_exp = self.tuning_pheromone_selection
         p = component.pheromone
-        # TODO define value of component
-
-        des = pow(p, self.tuning_pheromone_selection)
-        if val_map:
-            val = val_map[component]  # component.value
-            des = des * pow(val, self.tuning_heuristic_selection)
+        des = pow(p, pheromone_exp) * pow(value, self.tuning_heuristic_selection)
         return des
 
     def assess_fitness_complete(self, fitness_old, new_comp, solution):
