@@ -362,11 +362,8 @@ class Solution:
         is_complete = all_features == current_features
         return is_complete
 
-    @timeit
+    # @timeit
     def get_valid_components(self, global_components):
-        """
-        to slow!
-        """
         valid_components = []
         all_features = set(self.model.features)
         ok_features = set((comp.feature for comp in self.components))
@@ -398,8 +395,9 @@ class Solution:
 
     def get_fitness(self):
         if not self.fitness or self.has_changed_since_eval:
-            self.fitness = self.assess_fitness()
+            # self.fitness = 1
             self.has_changed_since_eval = False
+            self.fitness = self.assess_fitness()
 
         return self.fitness
 
@@ -438,8 +436,8 @@ class BruteForce:
         self.components = []
         for feature in model.features:
             # print(feature)
-            component_off = Component(feature, 0)
-            component_on = Component(feature, 1)
+            component_off = Component(feature, 0, model)
+            component_on = Component(feature, 1, model)
             self.components.append(component_off)
             self.components.append(component_on)
         self.max_run_time = 5  # in seconds
@@ -459,7 +457,7 @@ class BruteForce:
                 # print("Number:", number)
                 feature_name = next(key for key, value in self.model.name_dict.items() if value == abs(number))
                 toggle = lambda x: (1, 0)[x < 0]
-                new_component = Component(feature_name, toggle(number))
+                new_component = Component(feature_name, toggle(number), self.model)
                 # print(new_component)
                 solution.append(new_component)
             counter += 1
@@ -542,6 +540,7 @@ class ACS:
                     else:
                         new_component = self.elitist_component_selection(solution, component_selection)
                         solution.append(new_component)
+
                 # print("found a valid solution!")
                 solution = self.hill_climbing(solution)
 
@@ -786,8 +785,8 @@ def main(argv):
         brute_force = BruteForce(model, visualizer)
         optimum = brute_force.find_best_solution()
     else:
-        visualizer.set_sleep_time_costs(1)
-        visualizer.set_sleep_time_pheromones(1)
+        visualizer.set_sleep_time_costs(30)
+        visualizer.set_sleep_time_pheromones(30)
         acs = ACS(model, visualizer)
         optimum = acs.find_best_solution(seconds=20)
 
