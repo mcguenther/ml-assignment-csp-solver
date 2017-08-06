@@ -336,7 +336,7 @@ class Solution:
         is_complete = all_features == current_features
         return is_complete
 
-    # @timeit
+    @timeit
     def get_valid_components(self, global_components):
         """
         to slow!
@@ -463,14 +463,10 @@ class ACS:
         # init
         self.model = model
         self.pop_size = 10
-        # self.elitist_learning_rate = 0.00006
-        self.elitist_learning_rate = 0.00001
-        # self.evaporation_rate = 0.1
-        self.evaporation_rate = 0.1
+        self.evaporation_rate = 0.05
         self.pheromones_init = 0.2
-        # TODO: check parameters for component selection
         self.hill_climbing_its = 0
-        self.elitist_select_prob = 0.9
+        self.elitist_select_prob = 0.5
         self.tuning_heuristic_selection = 5
         self.tuning_pheromone_selection = 1
         self.visualizer = visualizer
@@ -485,6 +481,7 @@ class ACS:
             self.components.append(component_off)
             self.components.append(component_on)
 
+        self.elitist_learning_rate = self.estimate_elitist_learning_rate()
         self.max_run_time = 5  # in seconds
 
     def time_up(self, start, seconds=None):
@@ -589,10 +586,29 @@ class ACS:
     def hill_climbing(self, solution):
         return solution
 
+    @timeit
+    def estimate_elitist_learning_rate(self):
+        cnf_solutions = pycosat.itersolve(self.model.constraint_list)
+        cost_list = []
+        counter = 0
+        # for sol in cnf_solutions:
+        for i in range(100):
+            solution = Solution(self.model)
+            sol = next(cnf_solutions)
+            for number in sol:
+                # print("Number:", number)
+                feature_name = next(key for key, value in self.model.name_dict.items() if value == abs(number))
+                toggle = lambda x: (1, 0)[x < 0]
+                new_component = Component(feature_name, toggle(number))
+                # print(new_component)
+                solution.append(new_component)
+            counter += 1
+            cost_list.append(solution.get_fitness())
 
-# optimizer python module
-
-
+        median = np.median(np.array(cost_list))
+        # 0.0001 * 100 =!= x * median
+        rate = 0.02 / median
+        return rate  # optimizer python module
 
 
 def is_model(search_space):
