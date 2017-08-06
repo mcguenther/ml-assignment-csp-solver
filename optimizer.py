@@ -449,6 +449,8 @@ class BruteForce:
                 # print(new_component)
                 solution.append(new_component)
             # counter += 1
+
+            # append top 200 list
             sol_fitness = solution.get_fitness()
             top_200.append((sol_fitness, solution))
             top_200.sort(key = itemgetter(0))
@@ -464,6 +466,10 @@ class BruteForce:
         # print(counter, "solutions")
         # print("Best fitness:", best.get_fitness())
         
+        # Soll jede Zeile den Namen der jeweiligen Componente enthalten?
+        # Oder reicht das so?
+
+        #  save top 200 list to csv file
         vm = os.path.splitext(os.path.basename(self.model.vm_path))[0]
         file = "brute_" + vm + ".csv"
         with open(file, "w") as csv_file:
@@ -512,6 +518,7 @@ class ACS:
             seconds = self.max_run_time
         # main part
         best = None
+        top_10 = []
         start = time.time()
         self.visualizer.add_sequence()
         while not self.time_up(start, seconds):
@@ -531,7 +538,14 @@ class ACS:
                 # print("found a valid solution!")
                 solution = self.hill_climbing(solution)
 
-                if not best or (solution.get_fitness() < best.get_fitness()):
+                # append top 10 list
+                sol_fitness = solution.get_fitness()
+                top_10.append((sol_fitness, solution))
+                top_10.sort(key = itemgetter(0))
+                if len(top_10) > 10:
+                   top_10.pop()
+
+                if not best or (sol_fitness < best.get_fitness()):
                     best = solution
                     self.visualizer.add_solution_forced(solution)
                     self.visualizer.update_pheromone_graph_forced(self.components)
@@ -547,6 +561,14 @@ class ACS:
                                           + self.elitist_learning_rate * best.get_fitness()
             self.visualizer.update_pheromone_graph(self.components)
         self.visualizer.visualize()
+        #  save top 10 list to csv file
+        vm = os.path.splitext(os.path.basename(self.model.vm_path))[0]
+        file = "acs_" + vm + ".csv"
+        with open(file, "w") as csv_file:
+            out = csv.writer(csv_file, quoting=csv.QUOTE_ALL)
+            out.writerow(["Fitness", "Components"])
+            for i in range(200):
+                out.writerow(top_10[i])
         return best
 
     # @timeit
