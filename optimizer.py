@@ -692,7 +692,7 @@ def create_dummy_config(model, min, max):
 
 
 def help_str():
-    return "USAGE: Optimize model.xml model_feature.txt model_interactions.txt"
+    return "USAGE: Optimize model.xml model_feature.txt model_interactions.txt [brute] [visualize]"
 
 
 def parse_args(argv):
