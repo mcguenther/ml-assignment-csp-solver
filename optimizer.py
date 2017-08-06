@@ -186,7 +186,10 @@ class Visualizer:
         self.ax_pheromone_history.set_xticklabels(comp_names, rotation='vertical', fontsize=8)
 
         self.init_pheromone_graph()
-        self.ax_pheromone_history.bar(np.arange(num_pheromones), pheromones)
+        # let's use two nice colours for bars of the same component:
+        # #FC89AC "Tickle Me Pink" and #DE5285 "Fandango Pink"
+        colors = ['#FC89AC'] * 2 + ['#DE5285'] * 2
+        self.ax_pheromone_history.bar(np.arange(num_pheromones), pheromones, color=colors)
         self.fig.tight_layout()
         pylab.pause(1.e-8)
 
@@ -786,7 +789,7 @@ def main(argv):
         optimum = brute_force.find_best_solution()
     else:
         visualizer.set_sleep_time_costs(30)
-        visualizer.set_sleep_time_pheromones(30)
+        visualizer.set_sleep_time_pheromones(10)
         acs = ACS(model, visualizer)
         optimum = acs.find_best_solution(seconds=20)
 
