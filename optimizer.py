@@ -37,19 +37,41 @@ def timeit(method):
 
 
 class Component:
-    def __init__(self, feature, state, pheromone=None):
+    def __init__(self, feature, state, model, pheromone=None, constraints=None):
         self.feature = feature
+        self.model = model
         # untoggled feature: state = 0
         # toggled feature: state = 1
         self.state = state
         self.pheromone = pheromone
+        if not constraints:
+            constraints = []
+        self.constraints = constraints
 
-    def to_literal(self, name_dict):
-        literal = name_dict[self.feature]
+    def to_literal(self):
+        literal = self.model.name_dict[self.feature]
         if not self.state:
             literal = literal * -1
-
         return literal
+
+    def violates_contraints(self, literals):
+        own_literal = self.to_literal()
+        current_literals = list(literals)
+        if (own_literal * -1) in literals:
+            return True
+        current_literals.append(own_literal)
+
+        for constraint in self.constraints:
+            num_False = 0
+            for constraint_literal in constraint:
+                if constraint_literal in current_literals:
+                    break
+                elif constraint_literal * -1 in current_literals:
+                    num_False += 1
+            if num_False == len(constraint):
+                return True
+
+        return False
 
     def __str__(self):
         return "Component( " + self.feature + ", " + str(self.state) + ", " + str(self.pheromone) + " )"
@@ -198,9 +220,9 @@ class Model:
         self.interactions = interactions
 
         if is_model_dimacs(vm_path):
-            self.name_dict, self.constraint_list = self.read_vm_dimacs(vm_path)
+            self.name_dict, self.literal_dict, self.constraint_list = self.read_vm_dimacs(vm_path)
         else:
-            self.name_dict, self.constraint_list = self.read_vm_xml(vm_path)
+            self.name_dict, self.literal_dict, self.constraint_list = self.read_vm_xml(vm_path)
 
     # @timeit
     def read_vm_xml(self, file_model):
@@ -211,6 +233,7 @@ class Model:
         tree = ET.parse(file_model)
         root = tree.getroot()
         name2literal = {}
+        literal2name = {}
         name2excluded = {}
         name2is_optional = {}
         parent2children = {}
@@ -221,6 +244,7 @@ class Model:
             is_optional = str2bool(option.find('optional').text)
             new_literal = len(name2literal) + 1
             name2literal[key] = new_literal
+            literal2name[new_literal] = key
             name2is_optional[key] = is_optional
 
             parent_option = option.find('parent')
@@ -272,12 +296,13 @@ class Model:
             if candidate not in cnf:
                 cnf.append(candidate)
 
-        return name2literal, cnf
+        return name2literal, literal2name, cnf
 
     @timeit
     def read_vm_dimacs(self, file_model):
         content = read_file(file_model)
-        d = {}
+        name2literal_dict = {}
+        literal2name_dict = {}
         for line in content:
             if line.startswith("c"):
                 line = line.split()
@@ -286,7 +311,8 @@ class Model:
                     (val, key) = line
                     val = val.replace("$", "")
                     val = int(val)
-                    d[key] = val
+                    name2literal_dict[key] = val
+                    literal2name_dict[val] = key
 
         # from http://techqa.info/programming/question/28890268/parse-dimacs-cnf-file-python
         cnf = list()
@@ -306,7 +332,7 @@ class Model:
         assert len(cnf[-1]) == 0
         cnf.pop()
 
-        return d, cnf
+        return name2literal_dict, literal2name_dict, cnf
 
 
 def str2bool(val):
@@ -351,19 +377,13 @@ class Solution:
             if comp.feature in rest_features:
                 rest_components.add(comp)
 
-        config_literals = list(([comp.to_literal(self.model.name_dict)] for comp in self.components))
+        config_literals = list((comp.to_literal() for comp in self.components))
         constraints = self.model.constraint_list + config_literals
 
         for comp in rest_components:
-            tmp_literal = comp.to_literal(self.model.name_dict)
-            constraints.append([tmp_literal])
-            # showtime
-            result = pycosat.solve(constraints)
-            constraints.pop()
-            if result in ("UNSAT", "UNKNOWN"):
-                continue
-            # let's get this party started!
-            valid_components.append(comp)
+            if not comp.violates_contraints(config_literals):
+                # let's get this party started!
+                valid_components.append(comp)
 
         return valid_components
 
@@ -475,9 +495,21 @@ class ACS:
         self.beta = 2
 
         self.components = []
+        constraints_by_variable = {}
+        for constraint in self.model.constraint_list:
+            for literal in constraint:
+                variable = abs(literal)
+                if variable not in constraints_by_variable:
+                    constraints_by_variable[variable] = []
+                constraints_by_variable[variable].append(constraint)
+
         for feature in model.features:
-            component_off = Component(feature, 0, self.pheromones_init)
-            component_on = Component(feature, 1, self.pheromones_init)
+            if feature == "root" or self.model.name_dict[feature] not in constraints_by_variable:
+                variable_constraints = []
+            else:
+                variable_constraints = constraints_by_variable[self.model.name_dict[feature]]
+            component_off = Component(feature, 0, self.model, self.pheromones_init, variable_constraints)
+            component_on = Component(feature, 1, self.model, self.pheromones_init, variable_constraints)
             self.components.append(component_off)
             self.components.append(component_on)
 
@@ -599,7 +631,7 @@ class ACS:
                 # print("Number:", number)
                 feature_name = next(key for key, value in self.model.name_dict.items() if value == abs(number))
                 toggle = lambda x: (1, 0)[x < 0]
-                new_component = Component(feature_name, toggle(number))
+                new_component = Component(feature_name, toggle(number), [])
                 # print(new_component)
                 solution.append(new_component)
             counter += 1
@@ -754,8 +786,8 @@ def main(argv):
         brute_force = BruteForce(model, visualizer)
         optimum = brute_force.find_best_solution()
     else:
-        visualizer.set_sleep_time_costs(50)
-        visualizer.set_sleep_time_pheromones(10)
+        visualizer.set_sleep_time_costs(1)
+        visualizer.set_sleep_time_pheromones(1)
         acs = ACS(model, visualizer)
         optimum = acs.find_best_solution(seconds=20)
 
