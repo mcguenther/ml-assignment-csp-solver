@@ -570,6 +570,18 @@ class ACS:
         """
         too slow!
         """
+        feature_counts = {}
+        feature_comps = {}
+        for comp in component_selection:
+            if comp.feature not in feature_counts:
+                feature_counts[comp.feature] = 1
+                feature_comps[comp.feature] = comp
+            else:
+                feature_counts[comp.feature] += 1
+        rarest_comp = min(feature_counts, key=feature_counts.get)
+        if feature_counts[rarest_comp] == 1:
+            return feature_comps[rarest_comp]
+
         fitness_old = solution.get_fitness()
         fitness_map = {}
         for new_comp in component_selection:
