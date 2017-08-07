@@ -222,7 +222,7 @@ class DummyVisualizer:
 
     def update_pheromone_graph(self, components):
         pass
-        
+
     def update_pheromone_graph_forced(self, components):
         pass
 
@@ -460,22 +460,18 @@ class BruteForce:
     def find_best_solution(self):
         # main part
         best = None
-        # print()
         cnf_solutions = pycosat.itersolve(self.model.constraint_list)
         top_200 = []
 
+        # calculate all solutions
         counter = 0
         for sol in cnf_solutions:
             solution = Solution(self.model)
-            # print("Init solution:", solution.get_fitness())
             for number in sol:
-                # print("Number:", number)
                 feature_name = next(key for key, value in self.model.name_dict.items() if value == abs(number))
                 toggle = lambda x: (1, 0)[x < 0]
                 new_component = Component(feature_name, toggle(number), self.model)
-                # print(new_component)
                 solution.append(new_component)
-            # counter += 1
 
             # append top 200 list
             sol_fitness = solution.get_fitness()
@@ -490,20 +486,26 @@ class BruteForce:
             else:
                 self.visualizer.add_solution(solution)
 
-        # print(counter, "solutions")
-        # print("Best fitness:", best.get_fitness())
-        
-        # Soll jede Zeile den Namen der jeweiligen Componente enthalten?
-        # Oder reicht das so?
+        # save top 200 list to csv file
+        header = ["Fitness"]
+        for feature in self.model.name_dict:
+            header.append(feature)
 
-        #  save top 200 list to csv file
+        plain_solutions = [sub_list[1] for sub_list in top_200]
+        csv_list = []
+        for sol in plain_solutions:
+            mini_list = []
+            mini_list.append(sol.fitness)
+            for i in range(len(sol.components)):
+                mini_list.append(sol.components[i].state)
+            csv_list.append(mini_list)
+
         vm = os.path.splitext(os.path.basename(self.model.vm_path))[0]
         file = "brute_" + vm + ".csv"
         with open(file, "w") as csv_file:
             out = csv.writer(csv_file, quoting=csv.QUOTE_ALL)
-            out.writerow(["Fitness", "Components"])
-            for i in range(200):
-                out.writerow(top_200[i])
+            out.writerows([header])
+            out.writerows(csv_list)
 
         self.visualizer.visualize()
         return best
