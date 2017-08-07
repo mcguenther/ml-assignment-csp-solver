@@ -220,6 +220,12 @@ class DummyVisualizer:
     def set_sleep_time_pheromones(self, x):
         pass
 
+    def update_pheromone_graph(self, components):
+        pass
+        
+    def update_pheromone_graph_forced(self, components):
+        pass
+
 
 class Model:
     def __init__(self, vm_path, features, interactions):
@@ -601,7 +607,7 @@ class ACS:
         with open(file, "w") as csv_file:
             out = csv.writer(csv_file, quoting=csv.QUOTE_ALL)
             out.writerow(["Fitness", "Components"])
-            for i in range(200):
+            for i in range(10):
                 out.writerow(top_10[i])
         return best
 
