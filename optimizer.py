@@ -603,14 +603,27 @@ class ACS:
                                           + self.elitist_learning_rate * best.get_fitness()
             self.visualizer.update_pheromone_graph(self.components)
         self.visualizer.visualize()
-        #  save top 10 list to csv file
+
+        # save top 10 list to csv file
+        header = ["Fitness"]
+        for feature in self.model.name_dict:
+            header.append(feature)
+
+        plain_solutions = [sub_list[1] for sub_list in top_10]
+        csv_list = []
+        for sol in plain_solutions:
+            mini_list = []
+            mini_list.append(sol.fitness)
+            for i in range(len(sol.components)):
+                mini_list.append(sol.components[i].state)
+            csv_list.append(mini_list)
+
         vm = os.path.splitext(os.path.basename(self.model.vm_path))[0]
         file = "acs_" + vm + ".csv"
         with open(file, "w") as csv_file:
             out = csv.writer(csv_file, quoting=csv.QUOTE_ALL)
-            out.writerow(["Fitness", "Components"])
-            for i in range(10):
-                out.writerow(top_10[i])
+            out.writerows([header])
+            out.writerows(csv_list)
         return best
 
     # @timeit
