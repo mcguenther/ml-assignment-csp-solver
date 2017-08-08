@@ -53,7 +53,7 @@ class Component:
         self.constraints = constraints
 
     def to_literal(self):
-        literal = self.model.name_dict[self.feature]
+        literal = self.model.name2variable[self.feature]
         if not self.state:
             literal = literal * -1
         return literal
@@ -231,12 +231,30 @@ class Model:
     def __init__(self, vm_path, features, interactions):
         self.vm_path = vm_path
         self.features = features
-        self.interactions = interactions
+
+        self.influences_single = np.zeros(((len(features)), 1))
+        self.interactions = np.zeros((len(features), len(interactions)), dtype=np.bool)
+        self.influences_interactions = np.zeros((len(interactions), 1), dtype=np.float64)
 
         if is_model_dimacs(vm_path):
-            self.name_dict, self.literal_dict, self.constraint_list = self.read_vm_dimacs(vm_path)
+            self.name2variable, self.variable2name, self.constraint_list = self.read_vm_dimacs(vm_path)
         else:
-            self.name_dict, self.literal_dict, self.constraint_list = self.read_vm_xml(vm_path)
+            self.name2variable, self.variable2name, self.constraint_list = self.read_vm_xml(vm_path)
+
+        self.name2variable["root"] = 0
+        self.variable2name[0] = "root"
+
+        for variable, influence in [[self.name2variable[feature], features[feature]]
+                                    for feature in features]:
+            self.influences_single[variable, 0] = influence
+
+        for i, features in enumerate(interactions):
+            influence = interactions[features]
+            variables = [self.name2variable[feature] for feature in features]
+            self.interactions[variables, i] = 1
+            self.influences_interactions[i] = influence
+
+        self.expected_interaction_matches = np.sum(self.interactions, axis=0)
 
     # @timeit
     def read_vm_xml(self, file_model):
@@ -356,12 +374,26 @@ def str2bool(val):
 class Solution:
     def __init__(self, model, components=None):
         self.model = model
-        if components is None:
-            self.components = []
-        else:
-            self.components = components
+        if not components:
+            components = []
+        self.components = components
+        self.features = np.zeros(len(self.model.features) )
+        self.features[0] = 1
+        self.decisions = np.zeros(len(self.model.features) )
+        self.decisions[0] = 1
+
+        if components is not None:
+            for comp in components:
+                self.process_component(comp)
         self.fitness = None
         self.has_changed_since_eval = True
+
+    def process_component(self, comp):
+        literal = comp.to_literal()
+        index = abs(literal)
+        if literal > 0:
+            self.features[index] = 1
+        self.decisions[index] = 1
 
     def __str__(self):
         return "Solution( " + str(self.get_fitness()) + " | " + str(self.components) + ")"
@@ -370,17 +402,16 @@ class Solution:
         return self.__str__()
 
     def is_complete(self):
-        all_features = set(self.model.features)
-        all_features.remove("root")
-        current_features = set(comp.feature for comp in self.components)
-        is_complete = all_features == current_features
-        return is_complete
+        return np.all(self.decisions)
 
     # @timeit
     def get_valid_components(self, global_components):
         valid_components = []
         all_features = set(self.model.features)
-        ok_features = set((comp.feature for comp in self.components))
+        if self.components:
+            ok_features = set((comp.feature for comp in self.components))
+        else:
+            ok_features = set()
         rest_features = all_features - ok_features
         rest_features.remove("root")
         rest_components = set()
@@ -400,12 +431,18 @@ class Solution:
 
     def clear(self):
         self.components = []
-        self.has_changed_since_eval = True
+        self.features = np.zeros(len(self.model.features) + 1)
+        self.features[0] = 1
+        self.decisions = np.zeros(len(self.model.features) + 1)
+        self.decisions[0] = 1
+
         self.fitness = None
+        self.has_changed_since_eval = True
 
     def append(self, new_component):
-        self.components.append(new_component)
+        self.process_component(new_component)
         self.has_changed_since_eval = True
+        self.components.append(new_component)
 
     def get_fitness(self):
         if not self.fitness or self.has_changed_since_eval:
@@ -421,25 +458,13 @@ class Solution:
         assesses fitness
         to slow!
         """
-        fitness = self.model.features["root"]
+        result_costs_single = self.features.dot(self.model.influences_single)
+        matches = self.features.dot(self.model.interactions)
+        valid_interactions = self.model.expected_interaction_matches == matches
+        result_costs_interactions = np.sum(valid_interactions.dot(self.model.influences_interactions))
+        final_cost = result_costs_single + result_costs_interactions
 
-        for component in self.components:
-            if component.state:
-                feature = component.feature
-                value = self.model.features[feature]
-                fitness += value
-
-        for interaction_features in self.model.interactions:
-            matches = 0
-            for comp in self.components:
-                if comp.feature in interaction_features and comp.state == 1:
-                    matches += 1
-
-            if matches == len(interaction_features):
-                value = self.model.interactions[interaction_features]
-                fitness += value
-
-        return fitness
+        return final_cost[0]
 
 
 class BruteForce:
@@ -468,7 +493,7 @@ class BruteForce:
         for sol in cnf_solutions:
             solution = Solution(self.model)
             for number in sol:
-                feature_name = next(key for key, value in self.model.name_dict.items() if value == abs(number))
+                feature_name = next(key for key, value in self.model.name2variable.items() if value == abs(number))
                 toggle = lambda x: (1, 0)[x < 0]
                 new_component = Component(feature_name, toggle(number), self.model)
                 solution.append(new_component)
@@ -476,7 +501,7 @@ class BruteForce:
             # append top 200 list
             sol_fitness = solution.get_fitness()
             top_200.append((sol_fitness, solution))
-            top_200.sort(key = itemgetter(0))
+            top_200.sort(key=itemgetter(0))
             if len(top_200) > 200:
                 top_200.pop()
 
@@ -488,7 +513,7 @@ class BruteForce:
 
         # save top 200 list to csv file
         header = ["Fitness"]
-        for feature in self.model.name_dict:
+        for feature in self.model.name2variable:
             header.append(feature)
 
         plain_solutions = [sub_list[1] for sub_list in top_200]
@@ -537,10 +562,10 @@ class ACS:
                 constraints_by_variable[variable].append(constraint)
 
         for feature in model.features:
-            if feature == "root" or self.model.name_dict[feature] not in constraints_by_variable:
+            if feature == "root" or self.model.name2variable[feature] not in constraints_by_variable:
                 variable_constraints = []
             else:
-                variable_constraints = constraints_by_variable[self.model.name_dict[feature]]
+                variable_constraints = constraints_by_variable[self.model.name2variable[feature]]
             component_off = Component(feature, 0, self.model, self.pheromones_init, variable_constraints)
             component_on = Component(feature, 1, self.model, self.pheromones_init, variable_constraints)
             self.components.append(component_off)
@@ -583,9 +608,9 @@ class ACS:
                 # append top 30 list
                 sol_fitness = solution.get_fitness()
                 top_30.append((sol_fitness, solution))
-                top_30.sort(key = itemgetter(0))
+                top_30.sort(key=itemgetter(0))
                 if len(top_30) > 30:
-                   top_30.pop()
+                    top_30.pop()
 
                 if not best or (sol_fitness < best.get_fitness()):
                     best = solution
@@ -606,7 +631,7 @@ class ACS:
 
         # save top 30 list to csv file
         header = ["Fitness"]
-        for feature in self.model.name_dict:
+        for feature in self.model.name2variable:
             header.append(feature)
 
         plain_solutions = [sub_list[1] for sub_list in top_30]
@@ -708,9 +733,9 @@ class ACS:
             sol = next(cnf_solutions)
             for number in sol:
                 # print("Number:", number)
-                feature_name = next(key for key, value in self.model.name_dict.items() if value == abs(number))
+                feature_name = next(key for key, value in self.model.name2variable.items() if value == abs(number))
                 toggle = lambda x: (1, 0)[x < 0]
-                new_component = Component(feature_name, toggle(number), [])
+                new_component = Component(feature_name, toggle(number), self.model)
                 # print(new_component)
                 solution.append(new_component)
             counter += 1
@@ -729,7 +754,7 @@ class ACS:
             reader = csv.reader(csvfile, delimiter=' ', quotechar='|')
             for row in reader:
                 top_200.append(row)
-        top_200.pop(0) # remove header
+        top_200.pop(0)  # remove header
 
         print()
         for item in top_30:
