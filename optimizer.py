@@ -559,7 +559,7 @@ class ACS:
             seconds = self.max_run_time
         # main part
         best = None
-        top_10 = []
+        top_30 = []
         start = time.time()
         self.visualizer.add_sequence()
         while not self.time_up(start, seconds):
@@ -580,12 +580,12 @@ class ACS:
                 # print("found a valid solution!")
                 solution = self.hill_climbing(solution)
 
-                # append top 10 list
+                # append top 30 list
                 sol_fitness = solution.get_fitness()
-                top_10.append((sol_fitness, solution))
-                top_10.sort(key = itemgetter(0))
-                if len(top_10) > 10:
-                   top_10.pop()
+                top_30.append((sol_fitness, solution))
+                top_30.sort(key = itemgetter(0))
+                if len(top_30) > 30:
+                   top_30.pop()
 
                 if not best or (sol_fitness < best.get_fitness()):
                     best = solution
@@ -604,12 +604,12 @@ class ACS:
             self.visualizer.update_pheromone_graph(self.components)
         self.visualizer.visualize()
 
-        # save top 10 list to csv file
+        # save top 30 list to csv file
         header = ["Fitness"]
         for feature in self.model.name_dict:
             header.append(feature)
 
-        plain_solutions = [sub_list[1] for sub_list in top_10]
+        plain_solutions = [sub_list[1] for sub_list in top_30]
         csv_list = []
         for sol in plain_solutions:
             mini_list = []
@@ -624,6 +624,10 @@ class ACS:
             out = csv.writer(csv_file, quoting=csv.QUOTE_ALL)
             out.writerows([header])
             out.writerows(csv_list)
+
+        # compare top_30 with top_200 from brute force
+        self.compare_lists(top_30, vm)
+
         return best
 
     # @timeit
@@ -716,6 +720,21 @@ class ACS:
         # 0.0001 * 100 =!= x * median
         rate = 0.02 / median
         return rate  # optimizer python module
+
+    def compare_lists(self, top_30, vm):
+        file_200 = "brute_" + vm + ".csv"
+        top_200 = []
+
+        with open(file_200, newline='') as csvfile:
+            reader = csv.reader(csvfile, delimiter=' ', quotechar='|')
+            for row in reader:
+                top_200.append(row)
+        top_200.pop(0) # remove header
+
+        print()
+        for item in top_30:
+            if item in top_200:
+                print("Equal item:", item)
 
 
 def is_model(search_space):
