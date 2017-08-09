@@ -126,7 +126,8 @@ class Visualizer:
             self.sleep_state_pheromones += 1
 
     def update_pheromone_graph_forced(self, model, literals, pheromones):
-        comp_names = list((model.variable2name[abs(literal)] for literal in literals))
+        comp_names = list(
+            (model.variable2name[abs(literal)] + "=" + str(0 if literal < 0 else 1) for literal in literals))
         num_pheromones = len(pheromones)
         self.ax_pheromone_history.clear()
         # Set number of ticks for x-axis
@@ -177,7 +178,7 @@ class Model:
     def __init__(self, vm_path, features, interactions):
         self.vm_path = vm_path
 
-        self.costs_single = np.zeros(((len(features)), 1))
+        self.costs_single_matrix = np.zeros(((len(features)), 1))
         self.interactions = np.zeros((len(features), len(interactions)), dtype=np.bool)
         self.influences_interactions = np.zeros((len(interactions), 1), dtype=np.float64)
 
@@ -191,7 +192,9 @@ class Model:
 
         for variable, influence in [[self.name2variable[feature], features[feature]]
                                     for feature in features]:
-            self.costs_single[variable, 0] = influence
+            self.costs_single_matrix[variable, 0] = influence
+
+        self.costs_single = self.costs_single_matrix.copy().reshape(len(features))
 
         for i, features in enumerate(interactions):
             influence = interactions[features]
@@ -208,6 +211,9 @@ class Model:
                 if variable not in self.constraints_by_variable:
                     self.constraints_by_variable[variable] = []
                 self.constraints_by_variable[variable].append(constraint)
+
+        worst_solution = Solution(self, start_literals=range(len(self.costs_single)))
+        self.highest_cost_possible = worst_solution.get_cost()
 
     def violates_constraints(self, current_literals, literal):
         var = abs(literal)
@@ -375,7 +381,7 @@ class Solution:
             if start_decisions is not None:
                 self.decisions = start_decisions
 
-        self.fitness = None
+        self.cost = None
         self.has_changed_since_eval = True
 
     def to_literal_set(self):
@@ -405,8 +411,8 @@ class Solution:
     # @timeit
     def get_valid_literals(self, remaining_literals):
         config_literals = list(self.to_literal_set())
-        #new_cnf_entries = list([x] for x in config_literals)
-        #constraints = self.model.constraint_list + new_cnf_entries
+        # new_cnf_entries = list([x] for x in config_literals)
+        # constraints = self.model.constraint_list + new_cnf_entries
 
         valid_literals = set()
         for lit in remaining_literals:
@@ -423,7 +429,7 @@ class Solution:
         self.decisions = np.zeros(len(self.model.features))
         self.decisions[0] = 1
 
-        self.fitness = None
+        self.cost = None
         self.has_changed_since_eval = True
 
     def append(self, new_literal):
@@ -431,20 +437,18 @@ class Solution:
         self.has_changed_since_eval = True
 
     def get_fitness(self):
-        if not self.fitness or self.has_changed_since_eval:
+        return self.model.highest_cost_possible - self.get_cost()
+
+    def get_cost(self):
+        if not self.cost or self.has_changed_since_eval:
             # self.fitness = 1
             self.has_changed_since_eval = False
-            self.fitness = self.assess_fitness()
-
-        return self.fitness
+            self.cost = self.compute_cost()
+        return self.cost
 
     # @timeit
-    def assess_fitness(self):
-        """
-        assesses fitness
-        to slow!
-        """
-        result_costs_single = self.features.dot(self.model.costs_single)
+    def compute_cost(self):
+        result_costs_single = self.features.dot(self.model.costs_single_matrix)
         matches = self.features.dot(self.model.interactions)
         valid_interactions = self.model.expected_interaction_matches == matches
         result_costs_interactions = np.sum(valid_interactions.dot(self.model.influences_interactions))
@@ -527,12 +531,13 @@ class ACS:
         # init
         self.model = model
         self.pop_size = 10
-        self.evaporation_rate = 0.05
-        self.pheromones_init = 0.2
+        self.evaporation_rate = 0.1
+        self.pheromones_init = 0.5
         self.hill_climbing_its = 0
         self.elitist_select_prob = 0.5
-        self.tuning_heuristic_selection = 5
-        self.tuning_pheromone_selection = 1
+        self.tuning_heuristic_selection = 1
+        self.tuning_pheromone_selection = 3
+        self.max_pheromone_step = 0.003
         self.visualizer = visualizer
 
         self.literals = []
@@ -607,6 +612,8 @@ class ACS:
                     else:
                         new_literal = self.elitist_literal_selection(solution, possible_literals)
                         solution.append(new_literal)
+                        possible_literals.discard(new_literal)
+                        possible_literals.discard(-1 * new_literal)
 
                 solution = self.hill_climbing(solution)
 
@@ -617,20 +624,22 @@ class ACS:
                 if len(top_30) > 30:
                     top_30.pop()
 
-                if not best or (sol_cost < best.get_get_cost()):
+                if not best or (sol_cost < best.get_cost()):
                     best = solution
                     self.visualizer.add_solution_forced(best.get_cost())
-                    self.visualizer.update_pheromone_graph_forced(self.model, self.pheromones, self.literals)
+                    self.visualizer.update_pheromone_graph_forced(self.model, self.literals, self.pheromones.values())
                 else:
                     self.visualizer.add_solution(sol_cost)
 
-            for i, p in enumerate(self.pheromones):
-                self.pheromones[i] = (1 - self.evaporation_rate) * p + self.evaporation_rate * self.pheromones_init
-                if self.literals[i] in best.literals:
-                    self.pheromones[i] = (1 - self.elitist_learning_rate) * p \
-                                         + self.elitist_learning_rate * best.get_fitness()
-            self.visualizer.update_pheromone_graph(self.model, self.literals, self.pheromones)
-            print("finished an epoch")
+            literals_of_best = best.to_literal_set()
+            for literal in self.pheromones:
+                p = self.pheromones[literal]
+                self.pheromones[literal] = (
+                                           1 - self.evaporation_rate) * p + self.evaporation_rate * self.pheromones_init
+                if literal in literals_of_best:
+                    self.pheromones[literal] = (1 - self.elitist_learning_rate) * p \
+                                               + self.elitist_learning_rate * best.get_fitness()
+            self.visualizer.update_pheromone_graph(self.model, self.literals, self.pheromones.values())
         self.visualizer.visualize()
 
         # save top 30 list to csv file
@@ -660,7 +669,7 @@ class ACS:
             # compare top_30 with top_200 from brute force
             # self.compare_lists(top_30, vm)
 
-    @timeit
+    # @timeit
     def elitist_literal_selection(self, solution, possible_literals):
         for i in possible_literals:
             if -1 * i not in possible_literals:
@@ -686,11 +695,15 @@ class ACS:
                 des_map[literal] = self.desirebility(literal, fitness_map[literal], pheromone_exp=1)
             best = max(des_map, key=des_map.get)
         else:
-            des_vec_function = np.vectorize(self.desirebility)
-            des = list(des_vec_function(np.array(list(fitness_map.keys())), np.array(list(fitness_map.values()))))
+            # des_vec_function = np.vectorize(self.desirebility)
+            # des = list(des_vec_function(np.array(list(fitness_map.keys())), np.array(list(fitness_map.values()))))
+            des = []
+            for literal in fitness_map:
+                des_for_literal = self.desirebility(literal, fitness_map[literal])
+                des.append(des_for_literal)
             sum_des = np.sum(des)
             desirebility_probabilities = np.array(des) / sum_des
-            best = np.random.choice(possible_literals, p=desirebility_probabilities)
+            best = np.random.choice(list(possible_literals), p=desirebility_probabilities)
             # biased exploration
 
         return best
@@ -721,7 +734,7 @@ class ACS:
         cnf_solutions = pycosat.itersolve(self.model.constraint_list)
         cost_list = []
         # for sol in cnf_solutions:
-        for i in range(10):
+        for i in range(20):
             solution = Solution(self.model)
             sol = np.array(next(cnf_solutions))
             solution = Solution(self.model, start_literals=sol)
@@ -729,7 +742,7 @@ class ACS:
 
         median = np.median(np.array(cost_list))
         # 0.0001 * 100 =!= x * median
-        rate = 0.02 / median
+        rate = self.max_pheromone_step / median
         return rate  # optimizer python module
 
     def compare_lists(self, top_30, vm):
@@ -891,10 +904,10 @@ def main(argv):
         brute_force = BruteForce(model, visualizer)
         optimum = brute_force.find_best_solution()
     else:
-        visualizer.set_sleep_time_costs(30)
+        visualizer.set_sleep_time_costs(50)
         visualizer.set_sleep_time_pheromones(10)
         acs = ACS(model, visualizer)
-        optimum = acs.find_best_solution(seconds=5)
+        optimum = acs.find_best_solution(seconds=10)
 
     print("Optimum: " + str(optimum))
     return optimum
