@@ -628,18 +628,20 @@ class ACS:
                     break
                 solution = Solution(self.model, start_features=np.array(list(x for x in self.start_features)),
                                     start_decisions=np.array(list(x for x in self.start_decisions)))
+                possible_components = list(x for x in self.components)
                 while not solution.is_complete():
-                    component_selection = solution.get_valid_components(self.components)
-                    if not component_selection:
+                    possible_components = solution.get_valid_components(possible_components)
+                    if not possible_components:
                         print("ended up with invalid solution; starting over")
                         solution = Solution(self.model, start_features=np.array(list(x for x in self.start_features)),
                                             start_decisions=np.array(list(x for x in self.start_decisions)))
+                        possible_components = list(x for x in self.components)
                         continue
                     else:
-                        new_component = self.elitist_component_selection(solution, component_selection)
+                        new_component = self.elitist_component_selection(solution, possible_components)
                         solution.append(new_component)
 
-                print("found a valid solution!")
+
                 solution = self.hill_climbing(solution)
 
                 # append top 30 list
