@@ -40,56 +40,6 @@ def timeit(method):
     return timed
 
 
-class Component:
-    def __init__(self, feature, state, model, pheromone=None, constraints=None):
-        self.feature = feature
-        self.model = model
-        # untoggled feature: state = 0
-        # toggled feature: state = 1
-        self.state = state
-        self.pheromone = pheromone
-        if not constraints:
-            constraints = []
-        self.constraints = constraints
-
-    def to_literal(self):
-        literal = self.model.name2variable[self.feature]
-        if not self.state:
-            literal = literal * -1
-        return literal
-
-    def violates_contraints(self, literals):
-        own_literal = self.to_literal()
-        current_literals = list(literals)
-        if (own_literal * -1) in literals:
-            return True
-        current_literals.append(own_literal)
-
-        for constraint in self.constraints:
-            num_False = 0
-            for constraint_literal in constraint:
-                if constraint_literal in current_literals:
-                    break
-                elif constraint_literal * -1 in current_literals:
-                    num_False += 1
-            if num_False == len(constraint):
-                return True
-
-        return False
-
-    def __str__(self):
-        return "Component( " + self.feature + ", " + str(self.state) + ", " + str(self.pheromone) + " )"
-
-    def __repr__(self):
-        return self.__str__()
-
-    def __hash__(self):
-        return hash(self.feature) ^ hash(self.state) ^ hash(self.pheromone)
-
-    def __eq__(self, other):
-        return self.feature == other.feature and self.state == other.state and self.pheromone == other.pheromone
-
-
 class VM:
     def __init__(self, dimacs):
         pass
@@ -129,26 +79,23 @@ class Visualizer:
     def add_sequence(self):
         self.sequences = []
 
-    def add_solution(self, solution):
+    def add_solution(self, cost):
         if self.sleep_state % (self.sleep_cycles_costs + 1) == 0:
-            self.add_solution_forced(solution)
+            self.add_solution_forced(cost)
             self.sleep_state = 1
         else:
             self.sleep_state += 1
 
-    def add_solution_forced(self, solution):
+    def add_solution_forced(self, cost):
         if not self.sequences:
             self.add_sequence()
-        self.sequences.append(solution.get_fitness())
+        self.sequences.append(cost)
         self.update_cost_graph()
 
     def update_cost_graph(self):
         self.plot_data.set_data(np.arange(len(self.sequences)), self.sequences)
         if self.last_annotation:
             self.last_annotation.remove()
-
-        # xy = (len(self.sequences) - 2, self.sequences[-1] + 1)
-        # self.last_annotation = self.ax_cost_history.annotate(self.sequences[-1], xy=xy, textcoords='data')
 
         min_index = self.sequences.index(min(self.sequences))
         xy = (min_index, self.sequences[min_index] + 1)
@@ -171,16 +118,15 @@ class Visualizer:
     def set_sleep_time_pheromones(self, x):
         self.sleep_cycles_pheromones = x
 
-    def update_pheromone_graph(self, components):
+    def update_pheromone_graph(self, model, literals, pheromones):
         if self.sleep_state_pheromones % (self.sleep_cycles_pheromones + 1) == 0:
-            self.update_pheromone_graph_forced(components)
+            self.update_pheromone_graph_forced(model, literals, pheromones)
             self.sleep_state_pheromones = 1
         else:
             self.sleep_state_pheromones += 1
 
-    def update_pheromone_graph_forced(self, components):
-        pheromones = list((comp.pheromone for comp in components))
-        comp_names = list((comp.feature + "=" + str(comp.state) for comp in components))
+    def update_pheromone_graph_forced(self, model, literals, pheromones):
+        comp_names = list((model.variable2name[abs(literal)] for literal in literals))
         num_pheromones = len(pheromones)
         self.ax_pheromone_history.clear()
         # Set number of ticks for x-axis
@@ -230,9 +176,8 @@ class DummyVisualizer:
 class Model:
     def __init__(self, vm_path, features, interactions):
         self.vm_path = vm_path
-        self.features = features
 
-        self.influences_single = np.zeros(((len(features)), 1))
+        self.costs_single = np.zeros(((len(features)), 1))
         self.interactions = np.zeros((len(features), len(interactions)), dtype=np.bool)
         self.influences_interactions = np.zeros((len(interactions), 1), dtype=np.float64)
 
@@ -246,7 +191,7 @@ class Model:
 
         for variable, influence in [[self.name2variable[feature], features[feature]]
                                     for feature in features]:
-            self.influences_single[variable, 0] = influence
+            self.costs_single[variable, 0] = influence
 
         for i, features in enumerate(interactions):
             influence = interactions[features]
@@ -256,7 +201,49 @@ class Model:
 
         self.expected_interaction_matches = np.sum(self.interactions, axis=0)
 
-    # @timeit
+        self.constraints_by_variable = {}
+        for constraint in self.constraint_list:
+            for literal in constraint:
+                variable = abs(literal)
+                if variable not in self.constraints_by_variable:
+                    self.constraints_by_variable[variable] = []
+                self.constraints_by_variable[variable].append(constraint)
+
+    def violates_constraints(self, current_literals, literal):
+        var = abs(literal)
+        new_literals = set(x for x in current_literals)
+        if (literal * -1) in new_literals:
+            return True
+        new_literals.add(literal)
+
+        if var in self.constraints_by_variable:
+            constraints = self.constraints_by_variable[var]
+            for constraint in constraints:
+                num_False = 0
+                for constraint_literal in constraint:
+                    if constraint_literal in new_literals:
+                        break
+                    elif constraint_literal * -1 in new_literals:
+                        num_False += 1
+                if num_False == len(constraint):
+                    return True
+        return False
+
+    def assess_cost_delta(self, current_literals, new_literal):
+        if new_literal < 0:
+            delta = 0
+        else:
+            delta = self.costs_single[new_literal]
+            assumed_features = set(list(current_literals) + [new_literal])
+            if new_literal in self.influences_interactions:
+                interactions = self.influences_interactions[new_literal]
+                for interaction, cost in interactions:
+                    if set(interaction) <= assumed_features:
+                        delta += cost
+        return delta
+
+        # @timeit
+
     def read_vm_xml(self, file_model):
         print("it's an XML!")
         # content = read_file(file_model)
@@ -372,39 +359,42 @@ def str2bool(val):
 
 
 class Solution:
-    def __init__(self, model, components=None, start_features=None, start_decisions=None):
+    def __init__(self, model, start_features=None, start_decisions=None, start_literals=None):
         self.model = model
-        if not components:
-            components = []
-        self.components = components
 
-        if start_features is not None:
-            self.features = start_features
+        self.features = np.zeros(len(self.model.costs_single))
+        self.features[0] = 1
+        self.decisions = np.zeros(len(self.model.costs_single))
+        self.decisions[0] = 1
+        if start_literals is not None:
+            for literal in start_literals:
+                self.process_literal(literal)
         else:
-            self.features = np.zeros(len(self.model.features))
-            self.features[0] = 1
+            if start_features is not None:
+                self.features = start_features
+            if start_decisions is not None:
+                self.decisions = start_decisions
 
-        if start_decisions is not None:
-            self.decisions = start_decisions
-        else:
-            self.decisions = np.zeros(len(self.model.features))
-            self.decisions[0] = 1
-
-        if components is not None:
-            for comp in components:
-                self.process_component(comp)
         self.fitness = None
         self.has_changed_since_eval = True
 
-    def process_component(self, comp):
-        literal = comp.to_literal()
+    def to_literal_set(self):
+        decision_indexes, = np.nonzero(self.decisions)
+        literals = set()
+        for i in decision_indexes:
+            if i != 0:
+                literal = i if self.features[i] > 0 else -1 * i
+                literals.add(literal)
+        return literals
+
+    def process_literal(self, literal):
         index = abs(literal)
-        if literal > 0:
-            self.features[index] = 1
+        self.features[index] = 1 if literal > 0 else 0
         self.decisions[index] = 1
 
     def __str__(self):
-        return "Solution( " + str(self.get_fitness()) + " | " + str(self.components) + ")"
+        # return "Solution( " + str(self.get_fitness()) + " | " + str(self.features) + ")"
+        return "Solution( " + str(self.get_fitness()) + ")"
 
     def __repr__(self):
         return self.__str__()
@@ -413,29 +403,18 @@ class Solution:
         return np.all(self.decisions)
 
     # @timeit
-    def get_valid_components(self, global_components):
-        valid_components = []
-        all_features = set(self.model.features)
-        if self.components:
-            ok_features = set((comp.feature for comp in self.components))
-        else:
-            ok_features = set()
-        rest_features = all_features - ok_features
-        rest_features.remove("root")
-        rest_components = set()
-        for comp in global_components:
-            if comp.feature in rest_features:
-                rest_components.add(comp)
+    def get_valid_literals(self, remaining_literals):
+        config_literals = list(self.to_literal_set())
+        #new_cnf_entries = list([x] for x in config_literals)
+        #constraints = self.model.constraint_list + new_cnf_entries
 
-        config_literals = list((comp.to_literal() for comp in self.components))
-        constraints = self.model.constraint_list + config_literals
-
-        for comp in rest_components:
-            if not comp.violates_contraints(config_literals):
+        valid_literals = set()
+        for lit in remaining_literals:
+            if not self.model.violates_constraints(config_literals, lit):
                 # let's get this party started!
-                valid_components.append(comp)
+                valid_literals.add(lit)
 
-        return valid_components
+        return valid_literals
 
     def clear(self):
         self.components = []
@@ -447,10 +426,9 @@ class Solution:
         self.fitness = None
         self.has_changed_since_eval = True
 
-    def append(self, new_component):
-        self.process_component(new_component)
+    def append(self, new_literal):
+        self.process_literal(new_literal)
         self.has_changed_since_eval = True
-        self.components.append(new_component)
 
     def get_fitness(self):
         if not self.fitness or self.has_changed_since_eval:
@@ -466,7 +444,7 @@ class Solution:
         assesses fitness
         to slow!
         """
-        result_costs_single = self.features.dot(self.model.influences_single)
+        result_costs_single = self.features.dot(self.model.costs_single)
         matches = self.features.dot(self.model.interactions)
         valid_interactions = self.model.expected_interaction_matches == matches
         result_costs_interactions = np.sum(valid_interactions.dot(self.model.influences_interactions))
@@ -557,57 +535,45 @@ class ACS:
         self.tuning_pheromone_selection = 1
         self.visualizer = visualizer
 
-        self.components = []
-        constraints_by_variable = {}
-        for constraint in self.model.constraint_list:
-            for literal in constraint:
-                variable = abs(literal)
-                if variable not in constraints_by_variable:
-                    constraints_by_variable[variable] = []
-                constraints_by_variable[variable].append(constraint)
+        self.literals = []
 
-        for feature in model.features:
-            if feature == "root" or self.model.name2variable[feature] not in constraints_by_variable:
-                variable_constraints = []
-            else:
-                variable_constraints = constraints_by_variable[self.model.name2variable[feature]]
-            component_off = Component(feature, 0, self.model, self.pheromones_init, variable_constraints)
-            component_on = Component(feature, 1, self.model, self.pheromones_init, variable_constraints)
-            self.components.append(component_off)
-            self.components.append(component_on)
+        for var in range(1, len(model.costs_single)):
+            # if var == self.model.name2variable["root"] or var not in constraints_by_variable:
+            #    variable_constraints = []
+            # else:
+            #    variable_constraints = constraints_by_variable[var]
+            literal_on = var
+            literal_off = -1 * var
+            self.literals.append(literal_on)
+            self.literals.append(literal_off)
 
         self.elitist_learning_rate = self.estimate_elitist_learning_rate()
-        self.start_features, self.start_decisions = self.get_minimum_solution()
+        self.start_literals, self.start_features, self.start_decisions = self.get_minimum_solution()
+        self.pheromones = {}
+        for literal in self.literals:
+            self.pheromones[literal] = self.pheromones_init
         self.max_run_time = 5  # in seconds
         print("finished init")
 
     @timeit
     def get_minimum_solution(self):
         solution = Solution(self.model)
-        component_selection = solution.get_valid_components(self.components)
-        start_components = component_selection
-        start_literals = [comp.to_literal() for comp in start_components]
-        variable_occurences = {}
-        for literal in start_literals:
-            variable = abs(literal)
-            if variable not in variable_occurences:
-                variable_occurences[variable] = (1, literal)
-            else:
-                variable_occurences[variable] = (variable_occurences[variable][0] + 1, literal)
+        valid_literals = solution.get_valid_literals(self.literals)
 
-        start_features = np.zeros(len(self.model.features))
-        start_features[0] = 1
-        start_decisions = np.zeros(len(self.model.features))
-        start_decisions[0] = 1
+        solution_start_features = np.zeros(len(self.model.costs_single), dtype=np.int8)
+        solution_start_features[0] = 1
+        solution_start_decisions = np.zeros(len(self.model.costs_single), dtype=np.int8)
+        solution_start_decisions[0] = 1
 
-        start_literals = list(
-            variable_occurences[var][1] for var in variable_occurences if variable_occurences[var][0] == 1)
-        if start_literals:
-            start_variable_choices = list(abs(literal) for literal in start_literals)
-            start_toggle_on = (np.array(start_literals) > 0) * start_literals
-            start_features[start_toggle_on] = 1
-            start_decisions[start_variable_choices] = 1
-        return start_features, start_decisions
+        global_start_literals = set(x for x in valid_literals)
+        for i in valid_literals:
+            if -1 * i not in valid_literals:
+                var = abs(i)
+                solution_start_features[var] = 1 if i > 0 else 0
+                solution_start_decisions[var] = 1
+                global_start_literals.remove(i)
+
+        return global_start_literals, solution_start_features, solution_start_decisions
 
     def time_up(self, start, seconds=None):
         if not seconds:
@@ -628,52 +594,54 @@ class ACS:
                     break
                 solution = Solution(self.model, start_features=np.array(list(x for x in self.start_features)),
                                     start_decisions=np.array(list(x for x in self.start_decisions)))
-                possible_components = list(x for x in self.components)
+                possible_literals = list(x for x in self.start_literals)
                 while not solution.is_complete():
-                    possible_components = solution.get_valid_components(possible_components)
-                    if not possible_components:
+                    possible_literals = solution.get_valid_literals(possible_literals)
+                    if not possible_literals:
                         print("ended up with invalid solution; starting over")
-                        solution = Solution(self.model, start_features=np.array(list(x for x in self.start_features)),
+                        solution = Solution(self.model,
+                                            start_features=np.array(list(x for x in self.start_features)),
                                             start_decisions=np.array(list(x for x in self.start_decisions)))
-                        possible_components = list(x for x in self.components)
+                        possible_literals = list(x for x in self.start_literals)
                         continue
                     else:
-                        new_component = self.elitist_component_selection(solution, possible_components)
-                        solution.append(new_component)
-
+                        new_literal = self.elitist_literal_selection(solution, possible_literals)
+                        solution.append(new_literal)
 
                 solution = self.hill_climbing(solution)
 
                 # append top 30 list
-                sol_fitness = solution.get_fitness()
-                top_30.append((sol_fitness, solution))
+                sol_cost = solution.get_cost()
+                top_30.append((sol_cost, solution))
                 top_30.sort(key=itemgetter(0))
                 if len(top_30) > 30:
                     top_30.pop()
 
-                if not best or (sol_fitness < best.get_fitness()):
+                if not best or (sol_cost < best.get_get_cost()):
                     best = solution
-                    self.visualizer.add_solution_forced(solution)
-                    self.visualizer.update_pheromone_graph_forced(self.components)
+                    self.visualizer.add_solution_forced(best.get_cost())
+                    self.visualizer.update_pheromone_graph_forced(self.model, self.pheromones, self.literals)
                 else:
-                    self.visualizer.add_solution(solution)
+                    self.visualizer.add_solution(sol_cost)
 
-            for component in self.components:
-                component.pheromone = (1 - self.evaporation_rate) * component.pheromone \
-                                      + self.evaporation_rate * self.pheromones_init
-                if component in set(best.components):
-                    # TODO: check if formula for elitist pheromone increase is valid
-                    component.pheromone = (1 - self.elitist_learning_rate) * component.pheromone \
-                                          + self.elitist_learning_rate * best.get_fitness()
-            self.visualizer.update_pheromone_graph(self.components)
+            for i, p in enumerate(self.pheromones):
+                self.pheromones[i] = (1 - self.evaporation_rate) * p + self.evaporation_rate * self.pheromones_init
+                if self.literals[i] in best.literals:
+                    self.pheromones[i] = (1 - self.elitist_learning_rate) * p \
+                                         + self.elitist_learning_rate * best.get_fitness()
+            self.visualizer.update_pheromone_graph(self.model, self.literals, self.pheromones)
             print("finished an epoch")
         self.visualizer.visualize()
 
         # save top 30 list to csv file
+        # self.save_top_candidates_csv(top_30)
+
+        return best
+
+    def save_top_candidates_csv(self, top_30):
         header = ["Fitness"]
         for feature in self.model.name2variable:
             header.append(feature)
-
         plain_solutions = [sub_list[1] for sub_list in top_30]
         csv_list = []
         for sol in plain_solutions:
@@ -682,7 +650,6 @@ class ACS:
             for i in range(len(sol.components)):
                 mini_list.append(sol.components[i].state)
             csv_list.append(mini_list)
-
         vm = os.path.splitext(os.path.basename(self.model.vm_path))[0]
         file = "acs_" + vm + ".csv"
         with open(file, "w") as csv_file:
@@ -690,61 +657,48 @@ class ACS:
             out.writerows([header])
             out.writerows(csv_list)
 
-        # compare top_30 with top_200 from brute force
-        #self.compare_lists(top_30, vm)
+            # compare top_30 with top_200 from brute force
+            # self.compare_lists(top_30, vm)
 
-        return best
+    @timeit
+    def elitist_literal_selection(self, solution, possible_literals):
+        for i in possible_literals:
+            if -1 * i not in possible_literals:
+                return i
 
-    # @timeit
-    def elitist_component_selection(self, solution, component_selection):
-        """
-        too slow!
-        """
-        feature_counts = {}
-        feature_comps = {}
-        for comp in component_selection:
-            if comp.feature not in feature_counts:
-                feature_counts[comp.feature] = 1
-                feature_comps[comp.feature] = comp
-            else:
-                feature_counts[comp.feature] += 1
-        rarest_comp = min(feature_counts, key=feature_counts.get)
-        if feature_counts[rarest_comp] == 1:
-            return feature_comps[rarest_comp]
+        current_literals = solution.to_literal_set()
+        cost_map = {}
+        for literal in possible_literals:
+            cost_delta = self.model.assess_cost_delta(current_literals, literal)
+            cost_map[literal] = -1 * cost_delta
 
-        fitness_old = solution.get_fitness()
+        min_val = min(list(cost_map.values()))
         fitness_map = {}
-        for new_comp in component_selection:
-            # fitness_delta = self.assess_fitness_complete(fitness_old, new_comp, old_components)
-            fitness_delta = self.assess_fitness_complete(fitness_old, new_comp, solution)
-            fitness_map[new_comp] = -fitness_delta
-
-        min_val = min(list(fitness_map.values()))
-        for comp in fitness_map:
-            fitness_map[comp] = (fitness_map[comp] - min_val)  # / (max_val - min_val)
+        for literal in cost_map:
+            fitness_map[literal] = (cost_map[literal] - min_val)  # / (max_val - min_val)
         q = random.random()
 
         if q <= self.elitist_select_prob:
             # do elitist exploitation
             # TODO check min/max
             des_map = {}
-            for comp in fitness_map:
-                des_map[comp] = self.desirebility(comp, fitness_map[comp], pheromone_exp=1)
+            for literal in fitness_map:
+                des_map[literal] = self.desirebility(literal, fitness_map[literal], pheromone_exp=1)
             best = max(des_map, key=des_map.get)
         else:
             des_vec_function = np.vectorize(self.desirebility)
             des = list(des_vec_function(np.array(list(fitness_map.keys())), np.array(list(fitness_map.values()))))
-            sum_des = sum(des)
-            des = np.array(des) / sum_des
-            best = np.random.choice(component_selection, p=des)
+            sum_des = np.sum(des)
+            desirebility_probabilities = np.array(des) / sum_des
+            best = np.random.choice(possible_literals, p=desirebility_probabilities)
             # biased exploration
 
         return best
 
-    def desirebility(self, component, value, pheromone_exp=None):
+    def desirebility(self, literal, value, pheromone_exp=None):
         if not pheromone_exp:
             pheromone_exp = self.tuning_pheromone_selection
-        p = component.pheromone
+        p = self.pheromones[literal]
         des = pow(p, pheromone_exp) * pow(value, self.tuning_heuristic_selection)
         return des
 
@@ -766,19 +720,11 @@ class ACS:
     def estimate_elitist_learning_rate(self):
         cnf_solutions = pycosat.itersolve(self.model.constraint_list)
         cost_list = []
-        counter = 0
         # for sol in cnf_solutions:
         for i in range(10):
             solution = Solution(self.model)
-            sol = next(cnf_solutions)
-            for number in sol:
-                # print("Number:", number)
-                feature_name = next(key for key, value in self.model.name2variable.items() if value == abs(number))
-                toggle = lambda x: (1, 0)[x < 0]
-                new_component = Component(feature_name, toggle(number), self.model)
-                # print(new_component)
-                solution.append(new_component)
-            counter += 1
+            sol = np.array(next(cnf_solutions))
+            solution = Solution(self.model, start_literals=sol)
             cost_list.append(solution.get_fitness())
 
         median = np.median(np.array(cost_list))
@@ -948,7 +894,7 @@ def main(argv):
         visualizer.set_sleep_time_costs(30)
         visualizer.set_sleep_time_pheromones(10)
         acs = ACS(model, visualizer)
-        optimum = acs.find_best_solution(seconds=20)
+        optimum = acs.find_best_solution(seconds=5)
 
     print("Optimum: " + str(optimum))
     return optimum
