@@ -372,15 +372,23 @@ def str2bool(val):
 
 
 class Solution:
-    def __init__(self, model, components=None):
+    def __init__(self, model, components=None, start_features=None, start_decisions=None):
         self.model = model
         if not components:
             components = []
         self.components = components
-        self.features = np.zeros(len(self.model.features) )
-        self.features[0] = 1
-        self.decisions = np.zeros(len(self.model.features) )
-        self.decisions[0] = 1
+
+        if start_features is not None:
+            self.features = start_features
+        else:
+            self.features = np.zeros(len(self.model.features))
+            self.features[0] = 1
+
+        if start_decisions is not None:
+            self.decisions = start_decisions
+        else:
+            self.decisions = np.zeros(len(self.model.features))
+            self.decisions[0] = 1
 
         if components is not None:
             for comp in components:
@@ -431,9 +439,9 @@ class Solution:
 
     def clear(self):
         self.components = []
-        self.features = np.zeros(len(self.model.features) + 1)
+        self.features = np.zeros(len(self.model.features))
         self.features[0] = 1
-        self.decisions = np.zeros(len(self.model.features) + 1)
+        self.decisions = np.zeros(len(self.model.features))
         self.decisions[0] = 1
 
         self.fitness = None
@@ -549,9 +557,6 @@ class ACS:
         self.tuning_pheromone_selection = 1
         self.visualizer = visualizer
 
-        # from the 1997 paper reflecting the impact of the fitness
-        self.beta = 2
-
         self.components = []
         constraints_by_variable = {}
         for constraint in self.model.constraint_list:
@@ -572,7 +577,37 @@ class ACS:
             self.components.append(component_on)
 
         self.elitist_learning_rate = self.estimate_elitist_learning_rate()
+        self.start_features, self.start_decisions = self.get_minimum_solution()
         self.max_run_time = 5  # in seconds
+        print("finished init")
+
+    @timeit
+    def get_minimum_solution(self):
+        solution = Solution(self.model)
+        component_selection = solution.get_valid_components(self.components)
+        start_components = component_selection
+        start_literals = [comp.to_literal() for comp in start_components]
+        variable_occurences = {}
+        for literal in start_literals:
+            variable = abs(literal)
+            if variable not in variable_occurences:
+                variable_occurences[variable] = (1, literal)
+            else:
+                variable_occurences[variable] = (variable_occurences[variable][0] + 1, literal)
+
+        start_features = np.zeros(len(self.model.features))
+        start_features[0] = 1
+        start_decisions = np.zeros(len(self.model.features))
+        start_decisions[0] = 1
+
+        start_literals = list(
+            variable_occurences[var][1] for var in variable_occurences if variable_occurences[var][0] == 1)
+        if start_literals:
+            start_variable_choices = list(abs(literal) for literal in start_literals)
+            start_toggle_on = (np.array(start_literals) > 0) * start_literals
+            start_features[start_toggle_on] = 1
+            start_decisions[start_variable_choices] = 1
+        return start_features, start_decisions
 
     def time_up(self, start, seconds=None):
         if not seconds:
@@ -591,18 +626,20 @@ class ACS:
             for n in range(self.pop_size):
                 if self.time_up(start, seconds):
                     break
-                solution = Solution(self.model)
+                solution = Solution(self.model, start_features=np.array(list(x for x in self.start_features)),
+                                    start_decisions=np.array(list(x for x in self.start_decisions)))
                 while not solution.is_complete():
                     component_selection = solution.get_valid_components(self.components)
                     if not component_selection:
                         print("ended up with invalid solution; starting over")
-                        solution.clear()
+                        solution = Solution(self.model, start_features=np.array(list(x for x in self.start_features)),
+                                            start_decisions=np.array(list(x for x in self.start_decisions)))
                         continue
                     else:
                         new_component = self.elitist_component_selection(solution, component_selection)
                         solution.append(new_component)
 
-                # print("found a valid solution!")
+                print("found a valid solution!")
                 solution = self.hill_climbing(solution)
 
                 # append top 30 list
@@ -627,6 +664,7 @@ class ACS:
                     component.pheromone = (1 - self.elitist_learning_rate) * component.pheromone \
                                           + self.elitist_learning_rate * best.get_fitness()
             self.visualizer.update_pheromone_graph(self.components)
+            print("finished an epoch")
         self.visualizer.visualize()
 
         # save top 30 list to csv file
@@ -651,7 +689,7 @@ class ACS:
             out.writerows(csv_list)
 
         # compare top_30 with top_200 from brute force
-        self.compare_lists(top_30, vm)
+        #self.compare_lists(top_30, vm)
 
         return best
 
@@ -728,7 +766,7 @@ class ACS:
         cost_list = []
         counter = 0
         # for sol in cnf_solutions:
-        for i in range(100):
+        for i in range(10):
             solution = Solution(self.model)
             sol = next(cnf_solutions)
             for number in sol:
