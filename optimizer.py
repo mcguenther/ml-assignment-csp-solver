@@ -98,7 +98,7 @@ class Visualizer:
 
         min_index = self.sequences.index(min(self.sequences))
         xy = (min_index, self.sequences[min_index] + 1)
-        self.last_annotation = self.ax_cost_history.annotate(round(self.sequences[min_index], 2),
+        self.last_annotation = self.ax_cost_history.annotate(round(self.sequences[min_index], 3),
                                                              xy=xy, textcoords='data',
                                                              bbox=dict(boxstyle="round", fc="0.8"))
         self.ax_cost_history.plot(self.sequences, "b-")
@@ -124,16 +124,17 @@ class Visualizer:
         else:
             self.sleep_state_pheromones += 1
 
+    #@timeit
     def update_pheromone_graph_forced(self, model, literals, pheromones):
-        literals = literals[:self.max_pheromones]
-        pheromones = list(pheromones)[:self.max_pheromones]
+        truncated_literals = literals[:self.max_pheromones]
+        p_list = list(pheromones)
+        truncated_pheromones = p_list[:self.max_pheromones]
         comp_names = list(
-            (model.variable2name[abs(literal)] + "=" + str(0 if literal < 0 else 1) for literal in literals))
-        num_pheromones = len(pheromones)
+            (model.variable2name[abs(literal)] + "=" + str(0 if literal < 0 else 1) for literal in truncated_literals))
         self.ax_pheromone_history.clear()
         # Set number of ticks for x-axis
         # self.ax_pheromone_history.xticks(np.arange(num_pheromones), comp_names, rotation='vertical')
-        self.ax_pheromone_history.set_xticks(np.arange(num_pheromones))
+        self.ax_pheromone_history.set_xticks(np.arange(self.max_pheromones))
         # Set ticks labels for x-axis
         self.ax_pheromone_history.set_xticklabels(comp_names, rotation='vertical', fontsize=8)
 
@@ -141,7 +142,7 @@ class Visualizer:
         # let's use two nice colours for bars of the same component:
         # #FC89AC "Tickle Me Pink" and #DE5285 "Fandango Pink"
         colors = ['#FC89AC'] * 2 + ['#DE5285'] * 2
-        self.ax_pheromone_history.bar(np.arange(num_pheromones), pheromones, color=colors)
+        self.ax_pheromone_history.bar(np.arange(self.max_pheromones), truncated_pheromones, color=colors)
         self.fig.tight_layout()
         pylab.pause(1.e-8)
 
@@ -524,7 +525,7 @@ class ACS:
         # init
         self.model = model
         self.pop_size = 10
-        self.evaporation_rate = 0.1
+        self.evaporation_rate = 0.05
         self.pheromones_init = 0.5
         self.hill_climbing_its = 0
         self.elitist_select_prob = 0.95
@@ -599,7 +600,8 @@ class ACS:
                 if not best or (sol_cost < best.get_cost()):
                     best = solution
                     self.visualizer.add_solution_forced(best.get_cost())
-                    self.visualizer.update_pheromone_graph_forced(self.model, self.literals, list(self.pheromones.values()))
+                    self.visualizer.update_pheromone_graph_forced(self.model, self.literals,
+                                                                  list(self.pheromones.values()))
                 else:
                     self.visualizer.add_solution(sol_cost)
 
@@ -612,7 +614,7 @@ class ACS:
 
         return best
 
-    @timeit
+   #@timeit
     def update_pheromones(self, best):
         literals_of_best = best.to_literal_set()
         for literal in self.pheromones:
@@ -622,7 +624,7 @@ class ACS:
             if literal in literals_of_best:
                 self.pheromones[literal] = (1 - self.elitist_learning_rate) * p \
                                            + self.elitist_learning_rate * best.get_fitness()
-                self.visualizer.update_pheromone_graph(self.model, self.literals, self.pheromones.values())
+        self.visualizer.update_pheromone_graph(self.model, self.literals, self.pheromones.values())
 
     def construct_population(self, seconds, start):
         population = []
@@ -634,7 +636,7 @@ class ACS:
             population.append(solution)
         return population
 
-    @timeit
+    #@timeit
     def construct_solution(self, possible_literals=None, solution=None):
         while solution is None or not solution.is_complete():
             if not possible_literals or not solution:
@@ -644,7 +646,7 @@ class ACS:
                                     start_decisions=np.array(list(x for x in self.start_decisions)))
                 possible_literals = [x for x in self.start_literals]
 
-            new_literal = self.elitist_literal_selection(solution, possible_literals)
+            new_literal = self.dummy_literal_selection(solution, possible_literals)
             if not self.model.violates_constraints(solution.to_literal_set(), new_literal):
                 solution.append(new_literal)
                 possible_literals.remove(-1 * new_literal)
@@ -682,22 +684,51 @@ class ACS:
 
     # @timeit
     def elitist_literal_selection(self, solution, possible_literals):
-        for i in possible_literals:
-            if -1 * i not in possible_literals:
-                return i
+        current_literals = solution.to_literal_set()
+        cost_map = {}
+        for literal in possible_literals:
+            cost_delta = self.model.assess_cost_delta(current_literals, literal)
+            cost_map[literal] = -1 * cost_delta
 
+        min_val = min(list(cost_map.values()))
+        fitness_map = {}
+        for literal in cost_map:
+            fitness_map[literal] = (cost_map[literal] - min_val)  # / (max_val - min_val)
+        q = random.random()
+
+        if q <= self.elitist_select_prob:
+            # do elitist exploitation
+            # TODO check min/max
+            des_map = {}
+            for literal in fitness_map:
+                des_map[literal] = self.desirebility(literal, fitness_map[literal], pheromone_exp=1)
+            best = max(des_map, key=des_map.get)
+        else:
+            # des_vec_function = np.vectorize(self.desirebility)
+            # des = list(des_vec_function(np.array(list(fitness_map.keys())), np.array(list(fitness_map.values()))))
+            des = []
+            for literal in fitness_map:
+                des_for_literal = self.desirebility(literal, fitness_map[literal])
+                des.append(des_for_literal)
+            sum_des = np.sum(des)
+            desirebility_probabilities = np.array(des) / sum_des
+            best = np.random.choice(list(possible_literals), p=desirebility_probabilities)
+            # biased exploration
+        return best
+
+    def dummy_literal_selection(self, solution, possible_literals):
         q = random.random()
         if q <= self.elitist_select_prob:
             # do elitist exploitation
             best_pheromone = None
             best = None
-            #best_literal = None
+            # best_literal = None
             for literal in possible_literals:
                 p = self.pheromones[literal]
                 if not best_pheromone or p > best_pheromone:
                     best_pheromone = p
                     best = literal
-            #best = max(self.pheromones, key=self.pheromones.get)
+                    # best = max(self.pheromones, key=self.pheromones.get)
         else:
             # des_vec_function = np.vectorize(self.desirebility)
             # des = list(des_vec_function(np.array(list(fitness_map.keys())), np.array(list(fitness_map.values()))))
@@ -902,10 +933,10 @@ def main(argv):
         brute_force = BruteForce(model, visualizer)
         optimum = brute_force.find_best_solution()
     else:
-        visualizer.set_sleep_time_costs(50)
-        visualizer.set_sleep_time_pheromones(10)
+        visualizer.set_sleep_time_costs(100)
+        visualizer.set_sleep_time_pheromones(20)
         acs = ACS(model, visualizer)
-        optimum = acs.find_best_solution(seconds=20)
+        optimum = acs.find_best_solution(seconds=30)
 
     print("Optimum: " + str(optimum))
     return optimum
