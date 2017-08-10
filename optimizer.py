@@ -208,7 +208,7 @@ class Model:
                 variables = [self.name2variable[feature] for feature in features]
                 self.interactions[o, variables, i] = 1
                 self.influences_interactions[i, o] = influence
-            #self.expected_interaction_matches = np.sum(self.interactions, axis=1)
+                # self.expected_interaction_matches = np.sum(self.interactions, axis=1)
         self.expected_interaction_matches = np.sum(self.interactions, axis=1)
 
         self.constraints_by_variable = {}
@@ -331,7 +331,7 @@ class Model:
 
         return name2literal, literal2name, cnf
 
-    @timeit
+    # @timeit
     def read_vm_dimacs(self, file_model):
         content = read_file(file_model)
         name2literal_dict = {}
@@ -453,6 +453,34 @@ class Solution:
         final_cost = result_costs_single + result_costs_interactions
 
         return final_cost[0]
+
+
+class ParetoFront:
+    def __init__(self, all_solutions):
+        self.all_solutions = all_solutions
+        self.pareto_front = []
+        self.global_pareto_front = []
+
+    def compute_pareto_front():
+        # sort first objective
+        self.all_solutions = self.all_solutions[self.all_solutions[:, 0].argsort()]
+        # add first row to pareto_front
+        self.pareto_front = self.all_solutions[0:1, :]
+        # test next row against the last row in pareto_front
+        for row in self.all_solutions[1:, :]:
+            if sum([row[x] >= self.pareto_front[-1][x]
+                    for x in range(len(row))]) == len(row):
+                # if it is better on all features add the row to pareto_front
+                self.pareto_front = np.concatenate((self.pareto_front, [row]))
+
+        self.global_pareto_front.append(self.pareto_front)
+        if len(self.global_pareto_front) > len(population):
+            del self.global_pareto_front[len(population):]
+
+        return self.pareto_front
+
+    def dominates(x, y):
+        pass
 
 
 class BruteForce:
@@ -610,6 +638,8 @@ class ACS:
                 else:
                     self.visualizer.add_solution(sol_cost)
 
+            # pareto = ParetoFront(population)
+            # best = pareto.compute_pareto_front()
             self.update_pheromones(best)
             print("finished epoch")
         self.visualizer.visualize()
@@ -618,8 +648,6 @@ class ACS:
         # self.save_top_candidates_csv(top_30)
 
         return best
-
-        # @timeit
 
     def update_pheromones(self, best):
         literals_of_best = best.to_literal_set()
@@ -764,7 +792,7 @@ class ACS:
     def hill_climbing(self, solution):
         return solution
 
-    @timeit
+    # @timeit
     def estimate_elitist_learning_rate(self):
         cnf_solutions = pycosat.itersolve(self.model.constraint_list)
         cost_list = []
