@@ -124,7 +124,7 @@ class Visualizer:
         else:
             self.sleep_state_pheromones += 1
 
-    #@timeit
+    # @timeit
     def update_pheromone_graph_forced(self, model, literals, pheromones):
         truncated_literals = literals[:self.max_pheromones]
         p_list = list(pheromones)
@@ -177,12 +177,16 @@ class DummyVisualizer:
 
 
 class Model:
-    def __init__(self, vm_path, features, interactions):
+    def __init__(self, vm_path, features_by_objective, interactions_by_objective):
         self.vm_path = vm_path
 
-        self.costs_single_matrix = np.zeros(((len(features)), 1))
-        self.interactions = np.zeros((len(features), len(interactions)), dtype=np.bool)
-        self.influences_interactions = np.zeros((len(interactions), 1), dtype=np.float64)
+        num_features = len(features_by_objective[0])
+        num_objectives = len(features_by_objective)
+        num_interactions = len(interactions_by_objective[0])
+
+        self.costs_single_matrix = np.zeros((num_features, num_objectives))
+        self.interactions = np.zeros((num_objectives, num_features, num_interactions), dtype=np.bool)
+        self.influences_interactions = np.zeros((num_interactions, num_objectives), dtype=np.float64)
 
         if is_model_dimacs(vm_path):
             self.name2variable, self.variable2name, self.constraint_list = self.read_vm_dimacs(vm_path)
@@ -192,19 +196,20 @@ class Model:
         self.name2variable["root"] = 0
         self.variable2name[0] = "root"
 
-        for variable, influence in [[self.name2variable[feature], features[feature]]
-                                    for feature in features]:
-            self.costs_single_matrix[variable, 0] = influence
+        for o in range(num_objectives):
+            for variable, cost in [[self.name2variable[feature_name], features_by_objective[o][feature_name]]
+                                   for feature_name in features_by_objective[o]]:
+                self.costs_single_matrix[variable, o] = cost
 
-        self.costs_single = self.costs_single_matrix.copy().reshape(len(features))
+            # self.costs_single = self.costs_single_matrix.copy().reshape(len(features))
 
-        for i, features in enumerate(interactions):
-            influence = interactions[features]
-            variables = [self.name2variable[feature] for feature in features]
-            self.interactions[variables, i] = 1
-            self.influences_interactions[i] = influence
-
-        self.expected_interaction_matches = np.sum(self.interactions, axis=0)
+            for i, features in enumerate(interactions_by_objective[o]):
+                influence = interactions_by_objective[o][features]
+                variables = [self.name2variable[feature] for feature in features]
+                self.interactions[o, variables, i] = 1
+                self.influences_interactions[i, o] = influence
+            #self.expected_interaction_matches = np.sum(self.interactions, axis=1)
+        self.expected_interaction_matches = np.sum(self.interactions, axis=1)
 
         self.constraints_by_variable = {}
         for constraint in self.constraint_list:
@@ -214,7 +219,7 @@ class Model:
                     self.constraints_by_variable[variable] = []
                 self.constraints_by_variable[variable].append(constraint)
 
-        worst_solution = Solution(self, start_literals=range(len(self.costs_single)))
+        worst_solution = Solution(self, start_literals=range(num_features))
         self.highest_cost_possible = worst_solution.get_cost()
 
     # @timeit
@@ -614,7 +619,8 @@ class ACS:
 
         return best
 
-   #@timeit
+        # @timeit
+
     def update_pheromones(self, best):
         literals_of_best = best.to_literal_set()
         for literal in self.pheromones:
@@ -636,7 +642,7 @@ class ACS:
             population.append(solution)
         return population
 
-    #@timeit
+    # @timeit
     def construct_solution(self, possible_literals=None, solution=None):
         while solution is None or not solution.is_complete():
             if not possible_literals or not solution:
@@ -830,27 +836,33 @@ def read_file(file_name):
     return content
 
 
-def read_features(file_model_feature):
-    content = read_file(file_model_feature)
-    feature_influences = {}
-    for line in content:
-        line = clean_line(line)
-        feature_name, influence = line.split(":")
-        feature_influences[feature_name] = float(influence)
+def read_features(file_model_feature_files):
+    feature_costs_per_objective = []
+    for i, file_model_feature in enumerate(file_model_feature_files):
+        content = read_file(file_model_feature)
+        feature_cost = {}
+        for line in content:
+            line = clean_line(line)
+            feature_name, influence = line.split(":")
+            feature_cost[feature_name] = float(influence)
+        feature_costs_per_objective.append(feature_cost)
 
-    return feature_influences
+    return feature_costs_per_objective
 
 
-def read_interactions(file_model_interactions):
-    feature_influences = {}
-    content = read_file(file_model_interactions)
-    for line in content:
-        line = clean_line(line)
-        features, influence = line.split(":")
-        features_list = features.split("#")
-        interaction = tuple(features_list)
-        feature_influences[interaction] = float(influence)
-    return feature_influences
+def read_interactions(file_model_interaction_files):
+    interaction_costs_per_objective = []
+    for i, file_model_interactions in enumerate(file_model_interaction_files):
+        feature_influences = {}
+        content = read_file(file_model_interactions)
+        for line in content:
+            line = clean_line(line)
+            features, influence = line.split(":")
+            features_list = features.split("#")
+            interaction = tuple(features_list)
+            feature_influences[interaction] = float(influence)
+        interaction_costs_per_objective.append(feature_influences)
+    return interaction_costs_per_objective
 
 
 def clean_line(line):
@@ -876,8 +888,8 @@ def help_str():
 
 def parse_args(argv):
     file_model = ""
-    file_model_feature = ""
-    file_model_interations = ""
+    file_model_feature_files = []
+    file_model_interations_files = []
     found_options = False
     do_brute_force = False
     do_visualization = False
@@ -886,9 +898,9 @@ def parse_args(argv):
             if is_model(arg):
                 file_model = arg
             elif is_model_feature(arg):
-                file_model_feature = arg
+                file_model_feature_files.append(arg)
             elif is_model_interactions(arg):
-                file_model_interations = arg
+                file_model_interations_files.append(arg)
             elif arg == "brute":
                 do_brute_force = True
             elif arg == "visualize":
@@ -896,30 +908,29 @@ def parse_args(argv):
             else:
                 print("Unsupported File Name: " + arg)
 
-    if file_model and file_model_feature and file_model_interations:
+    if file_model and file_model_feature_files and file_model_interations_files:
         found_options = True
 
-    return found_options, file_model, file_model_feature, \
-           file_model_interations, do_brute_force, do_visualization
+    return found_options, file_model, file_model_feature_files, \
+           file_model_interations_files, do_brute_force, do_visualization
 
 
 def main(argv):
     # first read terminal arguments
-    found_options, file_model, file_model_feature, \
-    file_model_interations, do_brute_force, do_visualization = parse_args(argv)
+    found_options, file_model, file_model_feature_files, \
+    file_model_interations_files, do_brute_force, do_visualization = parse_args(argv)
 
     if not found_options:
         print(help_str())
         sys.exit(EXIT_ARGUMENT_ERROR)
 
     print("Reading Files")
-    features = read_features(file_model_feature)
-    interactions = read_interactions(file_model_interations)
-    print(interactions)
+    features_per_objective = read_features(file_model_feature_files)
+    interactions_per_objective = read_interactions(file_model_interations_files)
 
-    model = Model(file_model, features, interactions)
+    model = Model(file_model, features_per_objective, interactions_per_objective)
 
-    if not file_model or not features or not interactions:
+    if not file_model or not features_per_objective or not interactions_per_objective:
         print(help_str())
         sys.exit(EXIT_FILE_ERROR)
 
