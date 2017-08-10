@@ -400,7 +400,7 @@ class Solution:
 
     def __str__(self):
         # return "Solution( " + str(self.get_fitness()) + " | " + str(self.features) + ")"
-        return "Solution( " + str(self.get_fitness()) + ")"
+        return "Solution( )"
 
     def __repr__(self):
         return self.__str__()
@@ -422,16 +422,6 @@ class Solution:
 
         return valid_literals
 
-    def clear(self):
-        self.components = []
-        self.features = np.zeros(len(self.model.features))
-        self.features[0] = 1
-        self.decisions = np.zeros(len(self.model.features))
-        self.decisions[0] = 1
-
-        self.cost = None
-        self.has_changed_since_eval = True
-
     def append(self, new_literal):
         self.process_literal(new_literal)
         self.has_changed_since_eval = True
@@ -446,7 +436,7 @@ class Solution:
             self.cost = self.compute_cost()
         return self.cost
 
-    # @timeit
+    @timeit
     def compute_cost(self):
         result_costs_single = self.features.dot(self.model.costs_single_matrix)
         matches = self.features.dot(self.model.interactions)
