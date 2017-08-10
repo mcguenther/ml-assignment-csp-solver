@@ -527,6 +527,7 @@ class BruteForce:
 
 
 class ACS:
+    @timeit
     def __init__(self, model, visualizer):
         # init
         self.model = model
@@ -558,7 +559,6 @@ class ACS:
         for literal in self.literals:
             self.pheromones[literal] = self.pheromones_init
         self.max_run_time = 5  # in seconds
-        print("finished init")
 
     @timeit
     def get_minimum_solution(self):
@@ -589,34 +589,14 @@ class ACS:
         if not seconds:
             seconds = self.max_run_time
         # main part
+        start = time.time()
         best = None
         top_30 = []
-        start = time.time()
         self.visualizer.add_sequence()
         while not self.time_up(start, seconds):
-            for n in range(self.pop_size):
-                if self.time_up(start, seconds):
-                    break
-                solution = Solution(self.model, start_features=np.array(list(x for x in self.start_features)),
-                                    start_decisions=np.array(list(x for x in self.start_decisions)))
-                possible_literals = list(x for x in self.start_literals)
-                while not solution.is_complete():
-                    possible_literals = solution.get_valid_literals(possible_literals)
-                    if not possible_literals:
-                        print("ended up with invalid solution; starting over")
-                        solution = Solution(self.model,
-                                            start_features=np.array(list(x for x in self.start_features)),
-                                            start_decisions=np.array(list(x for x in self.start_decisions)))
-                        possible_literals = list(x for x in self.start_literals)
-                        continue
-                    else:
-                        new_literal = self.elitist_literal_selection(solution, possible_literals)
-                        solution.append(new_literal)
-                        possible_literals.discard(new_literal)
-                        possible_literals.discard(-1 * new_literal)
+            population = self.construct_population(seconds, start)
 
-                solution = self.hill_climbing(solution)
-
+            for solution in population:
                 # append top 30 list
                 sol_cost = solution.get_cost()
                 top_30.append((sol_cost, solution))
@@ -631,21 +611,52 @@ class ACS:
                 else:
                     self.visualizer.add_solution(sol_cost)
 
-            literals_of_best = best.to_literal_set()
-            for literal in self.pheromones:
-                p = self.pheromones[literal]
-                self.pheromones[literal] = (
-                                           1 - self.evaporation_rate) * p + self.evaporation_rate * self.pheromones_init
-                if literal in literals_of_best:
-                    self.pheromones[literal] = (1 - self.elitist_learning_rate) * p \
-                                               + self.elitist_learning_rate * best.get_fitness()
-            self.visualizer.update_pheromone_graph(self.model, self.literals, self.pheromones.values())
+            self.update_pheromones(best)
+            print("finished epoch")
         self.visualizer.visualize()
 
         # save top 30 list to csv file
         # self.save_top_candidates_csv(top_30)
 
         return best
+
+    def update_pheromones(self, best):
+        literals_of_best = best.to_literal_set()
+        for literal in self.pheromones:
+            p = self.pheromones[literal]
+            self.pheromones[literal] = (
+                                           1 - self.evaporation_rate) * p + self.evaporation_rate * self.pheromones_init
+            if literal in literals_of_best:
+                self.pheromones[literal] = (1 - self.elitist_learning_rate) * p \
+                                           + self.elitist_learning_rate * best.get_fitness()
+        self.visualizer.update_pheromone_graph(self.model, self.literals, self.pheromones.values())
+
+    def construct_population(self, seconds, start):
+        population = []
+        for n in range(self.pop_size):
+            if self.time_up(start, seconds):
+                break
+            solution = self.construct_solution()
+            solution = self.hill_climbing(solution)
+            population.append(solution)
+        return population
+
+    @timeit
+    def construct_solution(self, possible_literals=None, solution=None):
+        while solution is None or not solution.is_complete():
+            if not possible_literals:
+                # print("ended up with invalid solution; starting over")
+                solution = Solution(self.model,
+                                    start_features=np.array(list(x for x in self.start_features)),
+                                    start_decisions=np.array(list(x for x in self.start_decisions)))
+                possible_literals = set(list(x for x in self.start_literals))
+
+            new_literal = self.elitist_literal_selection(solution, possible_literals)
+            if not self.model.violates_constraints(solution.to_literal_set(), new_literal):
+                solution.append(new_literal)
+                possible_literals.discard(-1 * new_literal)
+            possible_literals.discard(new_literal)
+        return solution
 
     def save_top_candidates_csv(self, top_30):
         header = ["Fitness"]
@@ -907,7 +918,7 @@ def main(argv):
         visualizer.set_sleep_time_costs(50)
         visualizer.set_sleep_time_pheromones(10)
         acs = ACS(model, visualizer)
-        optimum = acs.find_best_solution(seconds=10)
+        optimum = acs.find_best_solution(seconds=30)
 
     print("Optimum: " + str(optimum))
     return optimum
