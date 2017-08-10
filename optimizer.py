@@ -7,7 +7,6 @@ import pycosat
 import random
 import xml.etree.ElementTree as ET
 import numpy as np
-import bisect
 import csv
 import os
 from random import randint
@@ -52,7 +51,7 @@ class Visualizer:
         self.sequences = []
         plt.ion()
         self.fig = plt.figure()
-
+        self.max_pheromones = 30
         self.last_annotation = None
         self.ax_cost_history = self.fig.add_subplot(211)
         self.ax_cost_history.set_title("Cost of best candidates over past epochs")
@@ -126,6 +125,8 @@ class Visualizer:
             self.sleep_state_pheromones += 1
 
     def update_pheromone_graph_forced(self, model, literals, pheromones):
+        literals = literals[:self.max_pheromones]
+        pheromones = list(pheromones)[:self.max_pheromones]
         comp_names = list(
             (model.variable2name[abs(literal)] + "=" + str(0 if literal < 0 else 1) for literal in literals))
         num_pheromones = len(pheromones)
@@ -167,10 +168,10 @@ class DummyVisualizer:
     def set_sleep_time_pheromones(self, x):
         pass
 
-    def update_pheromone_graph(self, components):
+    def update_pheromone_graph(self, model, literals, pheromones):
         pass
 
-    def update_pheromone_graph_forced(self, components):
+    def update_pheromone_graph_forced(self, model, literals, pheromones):
         pass
 
 
@@ -215,6 +216,7 @@ class Model:
         worst_solution = Solution(self, start_literals=range(len(self.costs_single)))
         self.highest_cost_possible = worst_solution.get_cost()
 
+    # @timeit
     def violates_constraints(self, current_literals, literal):
         var = abs(literal)
         new_literals = set(x for x in current_literals)
@@ -436,7 +438,7 @@ class Solution:
             self.cost = self.compute_cost()
         return self.cost
 
-    @timeit
+    # @timeit
     def compute_cost(self):
         result_costs_single = self.features.dot(self.model.costs_single_matrix)
         matches = self.features.dot(self.model.interactions)
@@ -525,7 +527,7 @@ class ACS:
         self.evaporation_rate = 0.1
         self.pheromones_init = 0.5
         self.hill_climbing_its = 0
-        self.elitist_select_prob = 0.5
+        self.elitist_select_prob = 0.95
         self.tuning_heuristic_selection = 1
         self.tuning_pheromone_selection = 3
         self.max_pheromone_step = 0.003
@@ -597,7 +599,7 @@ class ACS:
                 if not best or (sol_cost < best.get_cost()):
                     best = solution
                     self.visualizer.add_solution_forced(best.get_cost())
-                    self.visualizer.update_pheromone_graph_forced(self.model, self.literals, self.pheromones.values())
+                    self.visualizer.update_pheromone_graph_forced(self.model, self.literals, list(self.pheromones.values()))
                 else:
                     self.visualizer.add_solution(sol_cost)
 
@@ -610,6 +612,7 @@ class ACS:
 
         return best
 
+    @timeit
     def update_pheromones(self, best):
         literals_of_best = best.to_literal_set()
         for literal in self.pheromones:
@@ -619,7 +622,7 @@ class ACS:
             if literal in literals_of_best:
                 self.pheromones[literal] = (1 - self.elitist_learning_rate) * p \
                                            + self.elitist_learning_rate * best.get_fitness()
-        self.visualizer.update_pheromone_graph(self.model, self.literals, self.pheromones.values())
+                self.visualizer.update_pheromone_graph(self.model, self.literals, self.pheromones.values())
 
     def construct_population(self, seconds, start):
         population = []
@@ -634,18 +637,25 @@ class ACS:
     @timeit
     def construct_solution(self, possible_literals=None, solution=None):
         while solution is None or not solution.is_complete():
-            if not possible_literals:
+            if not possible_literals or not solution:
                 # print("ended up with invalid solution; starting over")
                 solution = Solution(self.model,
                                     start_features=np.array(list(x for x in self.start_features)),
                                     start_decisions=np.array(list(x for x in self.start_decisions)))
-                possible_literals = set(list(x for x in self.start_literals))
+                possible_literals = [x for x in self.start_literals]
 
             new_literal = self.elitist_literal_selection(solution, possible_literals)
             if not self.model.violates_constraints(solution.to_literal_set(), new_literal):
                 solution.append(new_literal)
-                possible_literals.discard(-1 * new_literal)
-            possible_literals.discard(new_literal)
+                possible_literals.remove(-1 * new_literal)
+            else:
+                opposite_literal = -1 * new_literal
+                if not self.model.violates_constraints(solution.to_literal_set(), opposite_literal):
+                    solution.append(opposite_literal)
+                    possible_literals.remove(opposite_literal)
+                else:
+                    solution = None
+            possible_literals.remove(new_literal)
         return solution
 
     def save_top_candidates_csv(self, top_30):
@@ -676,35 +686,22 @@ class ACS:
             if -1 * i not in possible_literals:
                 return i
 
-        current_literals = solution.to_literal_set()
-        cost_map = {}
-        for literal in possible_literals:
-            cost_delta = self.model.assess_cost_delta(current_literals, literal)
-            cost_map[literal] = -1 * cost_delta
-
-        min_val = min(list(cost_map.values()))
-        fitness_map = {}
-        for literal in cost_map:
-            fitness_map[literal] = (cost_map[literal] - min_val)  # / (max_val - min_val)
         q = random.random()
-
         if q <= self.elitist_select_prob:
             # do elitist exploitation
-            # TODO check min/max
-            des_map = {}
-            for literal in fitness_map:
-                des_map[literal] = self.desirebility(literal, fitness_map[literal], pheromone_exp=1)
-            best = max(des_map, key=des_map.get)
+            best_pheromone = None
+            best = None
+            #best_literal = None
+            for literal in possible_literals:
+                p = self.pheromones[literal]
+                if not best_pheromone or p > best_pheromone:
+                    best_pheromone = p
+                    best = literal
+            #best = max(self.pheromones, key=self.pheromones.get)
         else:
             # des_vec_function = np.vectorize(self.desirebility)
             # des = list(des_vec_function(np.array(list(fitness_map.keys())), np.array(list(fitness_map.values()))))
-            des = []
-            for literal in fitness_map:
-                des_for_literal = self.desirebility(literal, fitness_map[literal])
-                des.append(des_for_literal)
-            sum_des = np.sum(des)
-            desirebility_probabilities = np.array(des) / sum_des
-            best = np.random.choice(list(possible_literals), p=desirebility_probabilities)
+            best = np.random.choice(list(possible_literals))
             # biased exploration
 
         return best
@@ -908,7 +905,7 @@ def main(argv):
         visualizer.set_sleep_time_costs(50)
         visualizer.set_sleep_time_pheromones(10)
         acs = ACS(model, visualizer)
-        optimum = acs.find_best_solution(seconds=30)
+        optimum = acs.find_best_solution(seconds=20)
 
     print("Optimum: " + str(optimum))
     return optimum
