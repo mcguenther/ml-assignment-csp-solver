@@ -180,13 +180,13 @@ class Model:
     def __init__(self, vm_path, features_by_objective, interactions_by_objective):
         self.vm_path = vm_path
 
-        num_features = len(features_by_objective[0])
-        num_objectives = len(features_by_objective)
-        num_interactions = len(interactions_by_objective[0])
+        self.num_features = len(features_by_objective[0])
+        self.num_objectives = len(features_by_objective)
+        self.num_interactions = len(interactions_by_objective[0])
 
-        self.costs_single_matrix = np.zeros((num_features, num_objectives))
-        self.interactions = np.zeros((num_objectives, num_features, num_interactions), dtype=np.bool)
-        self.influences_interactions = np.zeros((num_interactions, num_objectives), dtype=np.float64)
+        self.costs_single_matrix = np.zeros((self.num_features, self.num_objectives))
+        self.interactions = np.zeros((self.num_objectives, self.num_features, self.num_interactions), dtype=np.bool)
+        self.influences_interactions = np.zeros((self.num_interactions, self.num_objectives), dtype=np.float64)
 
         if is_model_dimacs(vm_path):
             self.name2variable, self.variable2name, self.constraint_list = self.read_vm_dimacs(vm_path)
@@ -196,7 +196,7 @@ class Model:
         self.name2variable["root"] = 0
         self.variable2name[0] = "root"
 
-        for o in range(num_objectives):
+        for o in range(self.num_objectives):
             for variable, cost in [[self.name2variable[feature_name], features_by_objective[o][feature_name]]
                                    for feature_name in features_by_objective[o]]:
                 self.costs_single_matrix[variable, o] = cost
@@ -219,8 +219,8 @@ class Model:
                     self.constraints_by_variable[variable] = []
                 self.constraints_by_variable[variable].append(constraint)
 
-        worst_solution = Solution(self, start_literals=range(num_features))
-        self.highest_cost_possible = worst_solution.get_cost()
+        worst_solution = Solution(self, start_literals=range(self.num_features))
+        self.highest_costs_possible = worst_solution.get_cost()
 
     # @timeit
     def violates_constraints(self, current_literals, literal):
@@ -376,9 +376,9 @@ class Solution:
     def __init__(self, model, start_features=None, start_decisions=None, start_literals=None):
         self.model = model
 
-        self.features = np.zeros(len(self.model.costs_single))
+        self.features = np.zeros(self.model.num_features)
         self.features[0] = 1
-        self.decisions = np.zeros(len(self.model.costs_single))
+        self.decisions = np.zeros(self.model.num_features)
         self.decisions[0] = 1
         if start_literals is not None:
             for literal in start_literals:
@@ -435,24 +435,29 @@ class Solution:
         self.has_changed_since_eval = True
 
     def get_fitness(self):
-        return self.model.highest_cost_possible - self.get_cost()
+        return self.model.highest_costs_possible - self.get_cost()
 
     def get_cost(self):
-        if not self.cost or self.has_changed_since_eval:
+        if self.cost is None or self.has_changed_since_eval:
             # self.fitness = 1
             self.has_changed_since_eval = False
             self.cost = self.compute_cost()
         return self.cost
 
     # @timeit
-    def compute_cost(self):
+    def compute_cost(self, objectives=None):
+        objectives_to_return = range(self.model.num_objectives)
+
         result_costs_single = self.features.dot(self.model.costs_single_matrix)
         matches = self.features.dot(self.model.interactions)
         valid_interactions = self.model.expected_interaction_matches == matches
-        result_costs_interactions = np.sum(valid_interactions.dot(self.model.influences_interactions))
+        result_costs_interactions= np.zeros(self.model.num_objectives)
+        for i in objectives_to_return:
+            result_costs_interactions[i] = valid_interactions[i, :].dot(self.model.influences_interactions[:, i])
+        #result_costs_interactions = np.sum(valid_interactions.dot(self.model.influences_interactions))
         final_cost = result_costs_single + result_costs_interactions
 
-        return final_cost[0]
+        return final_cost
 
 
 class ParetoFront:
@@ -583,7 +588,7 @@ class ACS:
 
         self.literals = []
 
-        for var in range(1, len(model.costs_single)):
+        for var in range(1, self.model.num_features):
             # if var == self.model.name2variable["root"] or var not in constraints_by_variable:
             #    variable_constraints = []
             # else:
@@ -605,9 +610,9 @@ class ACS:
         solution = Solution(self.model)
         valid_literals = solution.get_valid_literals(self.literals)
 
-        solution_start_features = np.zeros(len(self.model.costs_single), dtype=np.int8)
+        solution_start_features = np.zeros(self.model.num_features, dtype=np.int8)
         solution_start_features[0] = 1
-        solution_start_decisions = np.zeros(len(self.model.costs_single), dtype=np.int8)
+        solution_start_decisions = np.zeros(self.model.num_features, dtype=np.int8)
         solution_start_decisions[0] = 1
 
         global_start_literals = set(x for x in valid_literals)
@@ -638,15 +643,15 @@ class ACS:
 
             for solution in population:
                 # append top 30 list
-                sol_cost = solution.get_cost()
+                sol_cost = solution.get_cost()[0]
                 top_30.append((sol_cost, solution))
                 top_30.sort(key=itemgetter(0))
                 if len(top_30) > 30:
                     top_30.pop()
 
-                if not best or (sol_cost < best.get_cost()):
+                if not best or (sol_cost < best.get_cost()[0]):
                     best = solution
-                    self.visualizer.add_solution_forced(best.get_cost())
+                    self.visualizer.add_solution_forced(best.get_cost()[0])
                     self.visualizer.update_pheromone_graph_forced(self.model, self.literals,
                                                                   list(self.pheromones.values()))
                 else:
@@ -671,7 +676,7 @@ class ACS:
                                            1 - self.evaporation_rate) * p + self.evaporation_rate * self.pheromones_init
             if literal in literals_of_best:
                 self.pheromones[literal] = (1 - self.elitist_learning_rate) * p \
-                                           + self.elitist_learning_rate * best.get_fitness()
+                                           + self.elitist_learning_rate * best.get_fitness()[0]
         self.visualizer.update_pheromone_graph(self.model, self.literals, self.pheromones.values())
 
     def construct_population(self, seconds, start):
