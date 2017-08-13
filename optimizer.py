@@ -463,24 +463,38 @@ class ParetoFront:
 
     def compute_pareto_front():
         # sort first objective
-        self.all_solutions = self.all_solutions[self.all_solutions[:, 0].argsort()]
-        # add first row to pareto_front
-        self.pareto_front = self.all_solutions[0:1, :]
-        # test next row against the last row in pareto_front
-        for row in self.all_solutions[1:, :]:
-            if sum([row[x] >= self.pareto_front[-1][x]
-                    for x in range(len(row))]) == len(row):
-                # if it is better on all features add the row to pareto_front
-                self.pareto_front = np.concatenate((self.pareto_front, [row]))
+        # self.all_solutions = self.all_solutions[self.all_solutions[:, 0].argsort()]
+        # print("All Solutions:", self.all_solutions)
+        # # add first row to pareto_front
+        # self.pareto_front = self.all_solutions[0:1, :]
+        # print("Pareto Front:", self.pareto_front)
+        # # test next row against the last row in pareto_front
+        # for row in self.all_solutions[1:, :]:
+        #     if sum([row[x] >= self.pareto_front[-1][x]
+        #             for x in range(len(row))]) == len(row):
+        #         # if it is better on all objectives add the row to pareto_front
+        #         self.pareto_front = np.concatenate((self.pareto_front, [row]))
 
-        self.global_pareto_front.append(self.pareto_front)
-        if len(self.global_pareto_front) > len(population):
-            del self.global_pareto_front[len(population):]
+        # self.global_pareto_front.append(self.pareto_front)
+        # if len(self.global_pareto_front) > len(population):
+        #     del self.global_pareto_front[len(population):]
+
+        # sort by cost of first objective
+        # itemgetter = 0?
+        solutions = sorted(self.all_solutions, key = itemgetter(0))
+        # add first row = objective?
+        self.pareto_front = solutions[0]
+        # test next row against last row in pareto front -> why last?
+        for row in solutions[1]:
+            # row, p or p, row
+            if dominates(row, self.pareto_front)
+
 
         return self.pareto_front
 
-    def dominates(x, y):
-        pass
+    # row, c or c, row
+    def dominates(row, candidate_row):
+        return sum([row[x] >= candidate_row[x] for x in range(len(row))]) == len(row)
 
 
 class BruteForce:
