@@ -407,11 +407,11 @@ class Solution:
         self.decisions[index] = 1
 
     def __str__(self):
-        # return "Solution( " + str(self.get_fitness()) + " | " + str(self.features) + ")"
-        return "Solution( )"
+        return "Solution( " + str(self.get_fitness()) + " | " + str(self.features) + ")"
+        #return "Solution( )"
 
     def __repr__(self):
-        return self.__str__()
+        return "Solution( " + "complete" if self.is_complete() else "incomplete" + " )"
 
     def is_complete(self):
         return np.all(self.decisions)
@@ -443,6 +443,12 @@ class Solution:
             self.has_changed_since_eval = False
             self.cost = self.compute_cost()
         return self.cost
+
+    def __hash__(self):
+        return hash(tuple(self.features)) ^ hash(tuple(self.decisions))
+
+    def __eq__(self, other):
+        return np.all(self.features == other.features) and np.all(self.decisions == other.decisions)
 
     # @timeit
     def compute_cost(self, objectives=None):
@@ -495,7 +501,7 @@ class ParetoFront:
 
         return front
 
-    #def compute_pareto_front(self):
+        # def compute_pareto_front(self):
         # sort first objective
         # self.all_solutions = self.all_solutions[self.all_solutions[:, 0].argsort()]
         # print("All Solutions:", self.all_solutions)
@@ -515,15 +521,15 @@ class ParetoFront:
 
         # sort by cost of first objective
         # itemgetter = 0?
-        #solutions = sorted(self.all_solutions, key=itemgetter(0))
+        # solutions = sorted(self.all_solutions, key=itemgetter(0))
         # add first row = objective?
-        #self.pareto_front = solutions[0]
+        # self.pareto_front = solutions[0]
         # test next row against last row in pareto front -> why last?
-        #for row in solutions[1]:
+        # for row in solutions[1]:
         #    # row, p or p, row
         #    if dominates(row, self.pareto_front)
 
-        #return self.pareto_front
+        # return self.pareto_front
 
     # row, c or c, row
     def dominates(row, candidate_row):
@@ -696,7 +702,9 @@ class ACS:
 
         return global_front
 
-    def update_pheromones(self, best):
+    def update_pheromones(self, pareto_front):
+        best = np.random.choice(list(pareto_front), 1)[0]
+
         literals_of_best = best.to_literal_set()
         for literal in self.pheromones:
             p = self.pheromones[literal]
@@ -1017,15 +1025,18 @@ def main(argv):
     if do_brute_force:
         visualizer.set_sleep_time_costs(50)
         brute_force = BruteForce(model, visualizer)
-        optimum = brute_force.find_best_solution()
+        pareto_front = brute_force.find_best_solution()
     else:
         visualizer.set_sleep_time_costs(100)
         visualizer.set_sleep_time_pheromones(20)
         acs = ACS(model, visualizer)
-        optimum = acs.find_best_solution(seconds=30)
+        pareto_front = acs.find_best_solution(seconds=30)
 
-    print("Optimum: " + str(optimum))
-    return optimum
+    print("Pareto front: ")
+    for solution in pareto_front:
+        print(str(solution))
+
+    return pareto_front
 
 
 if __name__ == "__main__":
