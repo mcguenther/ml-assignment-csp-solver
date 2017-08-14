@@ -451,22 +451,51 @@ class Solution:
         result_costs_single = self.features.dot(self.model.costs_single_matrix)
         matches = self.features.dot(self.model.interactions)
         valid_interactions = self.model.expected_interaction_matches == matches
-        result_costs_interactions= np.zeros(self.model.num_objectives)
+        result_costs_interactions = np.zeros(self.model.num_objectives)
         for i in objectives_to_return:
             result_costs_interactions[i] = valid_interactions[i, :].dot(self.model.influences_interactions[:, i])
-        #result_costs_interactions = np.sum(valid_interactions.dot(self.model.influences_interactions))
+        # result_costs_interactions = np.sum(valid_interactions.dot(self.model.influences_interactions))
         final_cost = result_costs_single + result_costs_interactions
 
         return final_cost
 
 
 class ParetoFront:
-    def __init__(self, all_solutions):
-        self.all_solutions = all_solutions
-        self.pareto_front = []
-        self.global_pareto_front = []
+    def __init__(self, model):
+        self.global_pareto_front = set()
+        self.model = model
 
-    def compute_pareto_front():
+    def pareto_dominates(self, sol1, sol2):
+        dominates = False
+        costs1 = sol1.get_cost()
+        costs2 = sol2.get_cost()
+        for o in range(self.model.num_objectives):
+            if costs1[o] < costs2[o]:
+                dominates = True
+            elif costs2[o] < costs1[o]:
+                return False
+        return dominates
+
+    def update_front(self, new_population):
+        local_front = self.get_front(new_population)
+        self.global_pareto_front = self.get_front(self.global_pareto_front.union(local_front))
+        return local_front, self.global_pareto_front
+
+    def get_front(self, pop):
+        front = set()
+        for sol_new in pop:
+            front.add(sol_new)
+            front_solutions = [x for x in front]
+            for sol_existent in front_solutions:
+                if self.pareto_dominates(sol_existent, sol_new):
+                    front.remove(sol_new)
+                    break
+                elif self.pareto_dominates(sol_new, sol_existent):
+                    front.remove(sol_existent)
+
+        return front
+
+    #def compute_pareto_front(self):
         # sort first objective
         # self.all_solutions = self.all_solutions[self.all_solutions[:, 0].argsort()]
         # print("All Solutions:", self.all_solutions)
@@ -486,16 +515,15 @@ class ParetoFront:
 
         # sort by cost of first objective
         # itemgetter = 0?
-        solutions = sorted(self.all_solutions, key = itemgetter(0))
+        #solutions = sorted(self.all_solutions, key=itemgetter(0))
         # add first row = objective?
-        self.pareto_front = solutions[0]
+        #self.pareto_front = solutions[0]
         # test next row against last row in pareto front -> why last?
-        for row in solutions[1]:
-            # row, p or p, row
-            if dominates(row, self.pareto_front)
+        #for row in solutions[1]:
+        #    # row, p or p, row
+        #    if dominates(row, self.pareto_front)
 
-
-        return self.pareto_front
+        #return self.pareto_front
 
     # row, c or c, row
     def dominates(row, candidate_row):
@@ -638,6 +666,7 @@ class ACS:
         best = None
         top_30 = []
         self.visualizer.add_sequence()
+        pareto = ParetoFront(self.model)
         while not self.time_up(start, seconds):
             population = self.construct_population(seconds, start)
 
@@ -657,16 +686,15 @@ class ACS:
                 else:
                     self.visualizer.add_solution(sol_cost)
 
-            # pareto = ParetoFront(population)
-            # best = pareto.compute_pareto_front()
-            self.update_pheromones(best)
+            local_front, global_front = pareto.update_front(population)
+            self.update_pheromones(local_front)
             print("finished epoch")
         self.visualizer.visualize()
 
         # save top 30 list to csv file
         # self.save_top_candidates_csv(top_30)
 
-        return best
+        return global_front
 
     def update_pheromones(self, best):
         literals_of_best = best.to_literal_set()
