@@ -674,6 +674,20 @@ class ACS:
         best = None
         top_30 = []
         self.visualizer.add_sequence()
+        # for pareto front visualization
+        fig = plt.figure(figsize=(9, 6))
+        ax = Axes3D(fig)
+        ax.set_xlabel("\nObjective1")
+        ax.set_ylabel("\nObjective2")
+        ax.set_zlabel("\n\n\nObjective3")
+        ax.set_xlim3d(70, 130)
+        ax.set_ylim3d(14000,20000)
+        ax.set_zlim3d(3500000,7000000)
+        legend1 = matplotlib.lines.Line2D([0],[0], linestyle="none", c="blue", marker="o")
+        legend2 = matplotlib.lines.Line2D([0],[0], linestyle="none", c="black", marker="o")
+        legend3 = matplotlib.lines.Line2D([0],[0], linestyle="none", c="red", marker="s")
+        ax.legend([legend1, legend2, legend3], ["Current Population", "Local Pareto Front", "Global Pareto Front"], numpoints = 1)
+        plt.ion()
         pareto = ParetoFront(self.model)
         while not self.time_up(start, seconds):
             population = self.construct_population(seconds, start)
@@ -696,27 +710,20 @@ class ACS:
 
             local_front, global_front = pareto.update_front(population)
             self.update_pheromones(local_front)
-            fig = plt.figure()
-            ax = Axes3D(fig)
-            ax.set_xlabel("\nObjective1")
-            ax.set_ylabel("\nObjective2")
-            ax.set_zlabel("\n\n\nObjective3")
-            legend1 = matplotlib.lines.Line2D([0],[0], linestyle="none", c="blue", marker="o")
-            legend2 = matplotlib.lines.Line2D([0],[0], linestyle="none", c="black", marker="o")
-            legend3 = matplotlib.lines.Line2D([0],[0], linestyle="none", c="red", marker="s")
-            ax.legend([legend1, legend2, legend3], ["Current Population", "Local Pareto Front", "Global Pareto Front"], numpoints = 1)
+            
+            # update pareto front visualization
             for solution in population:
                 ax.scatter(solution.cost[0], solution.cost[1], solution.cost[2], s=30, color="blue", marker="o")
             for solution in global_front:
                 ax.scatter(solution.cost[0], solution.cost[1], solution.cost[2], s=80, color="red", marker="s")
             for solution in local_front:
                 ax.scatter(solution.cost[0], solution.cost[1], solution.cost[2], s=30, color="black", marker="o")
-                # front = list(local_front)
-            # for i in range(len(front)-1):
-            #     plt.plot(front[i].cost[0], front[i+1].cost[0])
-            plt.show()
+            plt.pause(0.005)
             print("finished epoch")
+
         self.visualizer.visualize()
+        while True:
+            plt.pause(0.005)
 
         # save top 30 list to csv file
         # self.save_top_candidates_csv(top_30)
