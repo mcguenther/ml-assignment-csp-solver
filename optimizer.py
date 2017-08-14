@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import matplotlib.pylab as pylab
+import matplotlib.lines
 import re
 import time
 import sys
@@ -11,6 +12,7 @@ import csv
 import os
 from random import randint
 from operator import itemgetter
+from mpl_toolkits.mplot3d import Axes3D
 
 EXIT_ARGUMENT_ERROR = 2
 
@@ -694,6 +696,25 @@ class ACS:
 
             local_front, global_front = pareto.update_front(population)
             self.update_pheromones(local_front)
+            fig = plt.figure()
+            ax = Axes3D(fig)
+            ax.set_xlabel("\nObjective1")
+            ax.set_ylabel("\nObjective2")
+            ax.set_zlabel("\n\n\nObjective3")
+            legend1 = matplotlib.lines.Line2D([0],[0], linestyle="none", c="blue", marker="o")
+            legend2 = matplotlib.lines.Line2D([0],[0], linestyle="none", c="black", marker="o")
+            legend3 = matplotlib.lines.Line2D([0],[0], linestyle="none", c="red", marker="s")
+            ax.legend([legend1, legend2, legend3], ["Current Population", "Local Pareto Front", "Global Pareto Front"], numpoints = 1)
+            for solution in population:
+                ax.scatter(solution.cost[0], solution.cost[1], solution.cost[2], s=30, color="blue", marker="o")
+            for solution in global_front:
+                ax.scatter(solution.cost[0], solution.cost[1], solution.cost[2], s=80, color="red", marker="s")
+            for solution in local_front:
+                ax.scatter(solution.cost[0], solution.cost[1], solution.cost[2], s=30, color="black", marker="o")
+                # front = list(local_front)
+            # for i in range(len(front)-1):
+            #     plt.plot(front[i].cost[0], front[i+1].cost[0])
+            plt.show()
             print("finished epoch")
         self.visualizer.visualize()
 
