@@ -73,6 +73,7 @@ class Visualizer:
             # for pareto front visualization
             self.fig = plt.figure()
             self.fig.canvas.set_window_title("Multi-Objective Pareto Frontier Visualization")
+
             gs = gridspec.GridSpec(4, 1)
             self.ax1 = self.fig.add_subplot(gs[:3, :], projection='3d')
             self.ax1.set_xlabel("\nObjective1")
@@ -108,7 +109,7 @@ class Visualizer:
         legend3 = matplotlib.lines.Line2D([0], [0], linestyle="none", c="red", marker="s")
         self.ax1.legend([legend0, legend1, legend2, legend3],
                         ["Past Populations", "Current Population", "Local Pareto Front", "Global Pareto Front"],
-                        numpoints=1)
+                        numpoints=1, loc=1)
 
         for solution in self.old_pops:
             self.ax1.scatter(solution.cost[0], solution.cost[1], solution.cost[2], s=20, color="blue", marker="x")
@@ -468,7 +469,7 @@ class Solution:
         self.decisions[index] = 1
 
     def __str__(self):
-        return "Solution( " + str(self.get_fitness()) + " | " + str(self.features) + ")"
+        return "Solution( " + str(self.get_fitness()) + " | " + str(self.features) + " )"
         # return "Solution( )"
 
     def __repr__(self):
@@ -697,7 +698,7 @@ class ACS:
         # main part
         start = time.time()
         best = None
-        top_list = []
+        top_set = set()
         # self.visualizer.add_sequence()
 
         pareto = ParetoFront(self.model)
@@ -709,8 +710,8 @@ class ACS:
                 if self.model.num_objectives == 1:
                     # fill top 30 list
                     sol_cost = solution.get_cost()[0]
-                    top_list.append((sol_cost, solution))
-                    top_list.sort(key=itemgetter(0))
+                    top_set.add((sol_cost, solution))
+                    top_list = sorted(top_set, key=itemgetter(0))
                     if len(top_list) > 30:
                         top_list.pop()
                     # get best solution
@@ -800,23 +801,16 @@ class ACS:
         if self.model.num_objectives == 1:
             header = ["Fitness"]
             plain_solutions = [sub_list[1] for sub_list in top_list]
-            for sol in plain_solutions:
-                mini_list = []
-                mini_list.append(sol.fitness)
-                for i in range(len(sol.components)):
-                    mini_list.append(sol.components[i].state)
-                csv_list.append(mini_list)
         else:
             header = ["Objective1", "Objective2", "Objective3"]
             plain_solutions = list(top_list)
-            for sol in plain_solutions:
-                mini_list = []
-                for i in range(self.model.num_objectives):
-                    mini_list.append(sol.cost[i])
-                for i in range(len(sol.features)):
-                    mini_list.append(sol.features[i])
-                csv_list.append(mini_list)
-
+        for sol in plain_solutions:
+            mini_list = []
+            for i in range(self.model.num_objectives):
+                mini_list.append(sol.cost[i])
+            for i in range(len(sol.features)):
+                mini_list.append(sol.features[i])
+            csv_list.append(mini_list)
         for feature in self.model.name2variable:
             header.append(feature)
         vm = os.path.splitext(os.path.basename(self.model.vm_path))[0]
