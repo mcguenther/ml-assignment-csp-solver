@@ -74,7 +74,7 @@ class Visualizer:
             self.fig.subplots_adjust(bottom=2.25, top=2.75)
             self.fig.canvas.set_window_title("Multi-Objective Pareto Frontier Visualization")
             self.ax = Axes3D(self.fig)
-            self.ax.set_position([-0.045, 0, 0.999, 0.999])
+            self.ax.set_position([-0.04, 0, 0.999, 0.999])
             self.ax.set_xlabel("\nObjective1")
             self.ax.set_ylabel("\nObjective2")
             self.ax.set_zlabel("\n\n\nObjective3")
@@ -88,7 +88,7 @@ class Visualizer:
             legend3 = matplotlib.lines.Line2D([0], [0], linestyle="none", c="red", marker="s")
             self.ax.legend([legend0, legend1, legend2, legend3],
                            ["Past Populations", "Current Population", "Local Pareto Front", "Global Pareto Front"],
-                           numpoints=1)
+                           numpoints=1, loc=(0.05, 0.85))
             self.old_pops = set()
 
 
@@ -116,7 +116,7 @@ class Visualizer:
         legend3 = matplotlib.lines.Line2D([0], [0], linestyle="none", c="red", marker="s")
         self.ax.legend([legend0, legend1, legend2, legend3],
                        ["Past Populations", "Current Population", "Local Pareto Front", "Global Pareto Front"],
-                       numpoints=1)
+                       numpoints=1, loc=(0.045, 0.85))
 
         for solution in self.old_pops:
             self.ax.scatter(solution.cost[0], solution.cost[1], solution.cost[2], s=20, color="blue", marker="x")
