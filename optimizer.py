@@ -71,16 +71,15 @@ class Visualizer:
         else:
             # for pareto front visualization
             self.fig = plt.figure(figsize=(8, 6))
-            self.fig.subplots_adjust(bottom=2.25, top=2.75)
             self.fig.canvas.set_window_title("Multi-Objective Pareto Frontier Visualization")
             self.ax = Axes3D(self.fig)
             self.ax.set_position([-0.04, 0, 0.999, 0.999])
             self.ax.set_xlabel("\nObjective1")
             self.ax.set_ylabel("\nObjective2")
             self.ax.set_zlabel("\n\n\nObjective3")
-            self.ax.set_xlim3d(70, 130)
-            self.ax.set_ylim3d(13000, 20000)
-            self.ax.set_zlim3d(3500000, 7000000)
+            # self.ax.set_xlim3d(70, 130)
+            # self.ax.set_ylim3d(13000, 20000)
+            # self.ax.set_zlim3d(3500000, 7000000)
             self.ax.set_title("Solution Space", fontsize=16, fontweight="bold", y=1.023)
             legend0 = matplotlib.lines.Line2D([0], [0], linestyle="none", c="blue", marker="x")
             legend1 = matplotlib.lines.Line2D([0], [0], linestyle="none", c="blue", marker="o")
@@ -106,9 +105,9 @@ class Visualizer:
         self.ax.set_xlabel("\nObjective1")
         self.ax.set_ylabel("\nObjective2")
         self.ax.set_zlabel("\n\n\nObjective3")
-        self.ax.set_xlim3d(70, 130)
-        self.ax.set_ylim3d(13000, 20000)
-        self.ax.set_zlim3d(3500000, 7000000)
+        self.ax.set_xlim3d(60, 140)
+        self.ax.set_ylim3d(11000, 25000)
+        self.ax.set_zlim3d(3000000, 8000000)
         self.ax.set_title("Solution Space", fontsize=16, fontweight="bold", y=1.023)
         legend0 = matplotlib.lines.Line2D([0], [0], linestyle="none", c="blue", marker="x")
         legend1 = matplotlib.lines.Line2D([0], [0], linestyle="none", c="blue", marker="o")
@@ -665,11 +664,11 @@ class ACS:
             self.literals.append(literal_on)
             self.literals.append(literal_off)
 
-        self.elitist_learning_rate = self.estimate_elitist_learning_rate()
+        self.elitist_learning_rates = self.estimate_elitist_learning_rate()
         self.start_literals, self.start_features, self.start_decisions = self.get_minimum_solution()
         self.pheromones = {}
         for literal in self.literals:
-            self.pheromones[literal] = self.pheromones_init
+            self.pheromones[literal] = np.full(self.model.num_objectives, self.pheromones_init)
         self.max_run_time = 5  # in seconds
 
     @timeit
@@ -733,6 +732,7 @@ class ACS:
                 self.visualizer.update_pareto(population, local_front, global_front)
 
             self.update_pheromones(local_front)
+            #self.update_pheromones(global_front)
             print("finished epoch")
 
         print("Time is up!")
@@ -745,17 +745,21 @@ class ACS:
 
         return global_front
 
+    @timeit
     def update_pheromones(self, pareto_front):
-        best = np.random.choice(list(pareto_front), 1)[0]
-
-        literals_of_best = best.to_literal_set()
-        for literal in self.pheromones:
-            p = self.pheromones[literal]
-            self.pheromones[literal] = (
-                                           1 - self.evaporation_rate) * p + self.evaporation_rate * self.pheromones_init
-            if literal in literals_of_best:
-                self.pheromones[literal] = (1 - self.elitist_learning_rate) * p \
-                                           + self.elitist_learning_rate * best.get_fitness()[0]
+        #best = np.random.choice(list(pareto_front), 1)[0]
+        for best in pareto_front:
+            literals_of_best = best.to_literal_set()
+            for literal in self.pheromones:
+                p = self.pheromones[literal]
+                steps = self.elitist_learning_rates * best.get_fitness()
+                chosen_objective = steps.argmax()
+                self.pheromones[literal][chosen_objective] = (1 - self.evaporation_rate) * p[
+                    chosen_objective] + self.evaporation_rate * self.pheromones_init
+                if literal in literals_of_best:
+                    self.pheromones[literal][chosen_objective] = (1 - self.elitist_learning_rates[chosen_objective]) * p[
+                        chosen_objective] + self.elitist_learning_rates[chosen_objective] * best.get_fitness()[
+                        chosen_objective]
         self.visualizer.update_pheromone_graph(self.model, self.literals, self.pheromones.values())
 
     def construct_population(self, seconds, start):
@@ -770,6 +774,7 @@ class ACS:
 
     # @timeit
     def construct_solution(self, possible_literals=None, solution=None):
+        target_objective = np.random.choice(range(0, self.model.num_objectives), 1)[0]
         while solution is None or not solution.is_complete():
             if not possible_literals or not solution:
                 # print("ended up with invalid solution; starting over")
@@ -778,7 +783,7 @@ class ACS:
                                     start_decisions=np.array(list(x for x in self.start_decisions)))
                 possible_literals = [x for x in self.start_literals]
 
-            new_literal = self.dummy_literal_selection(solution, possible_literals)
+            new_literal = self.dummy_literal_selection(solution, possible_literals, target_objective)
             if not self.model.violates_constraints(solution.to_literal_set(), new_literal):
                 solution.append(new_literal)
                 possible_literals.remove(-1 * new_literal)
@@ -860,7 +865,7 @@ class ACS:
             # biased exploration
         return best
 
-    def dummy_literal_selection(self, solution, possible_literals):
+    def dummy_literal_selection(self, solution, possible_literals, target_objective):
         q = random.random()
         if q <= self.elitist_select_prob:
             # do elitist exploitation
@@ -868,23 +873,19 @@ class ACS:
             best = None
             # best_literal = None
             for literal in possible_literals:
-                p = self.pheromones[literal]
+                p = self.pheromones[literal][target_objective]
                 if not best_pheromone or p > best_pheromone:
                     best_pheromone = p
                     best = literal
-                    # best = max(self.pheromones, key=self.pheromones.get)
         else:
-            # des_vec_function = np.vectorize(self.desirebility)
-            # des = list(des_vec_function(np.array(list(fitness_map.keys())), np.array(list(fitness_map.values()))))
             best = np.random.choice(list(possible_literals))
-            # biased exploration
 
         return best
 
-    def desirebility(self, literal, value, pheromone_exp=None):
+    def desirebility(self, literal, value, target_objective, pheromone_exp=None):
         if not pheromone_exp:
             pheromone_exp = self.tuning_pheromone_selection
-        p = self.pheromones[literal]
+        p = self.pheromones[literal][target_objective]
         des = pow(p, pheromone_exp) * pow(value, self.tuning_heuristic_selection)
         return des
 
@@ -913,10 +914,10 @@ class ACS:
             solution = Solution(self.model, start_literals=sol)
             cost_list.append(solution.get_fitness())
 
-        median = np.median(np.array(cost_list))
+        medians = np.median(np.array(cost_list), axis=0)
         # 0.0001 * 100 =!= x * median
-        rate = self.max_pheromone_step / median
-        return rate  # optimizer python module
+        rates = self.max_pheromone_step / medians
+        return rates  # optimizer python module
 
     def compare_lists(self, top_30, vm):
         file_200 = "brute_" + vm + ".csv"
@@ -1089,7 +1090,7 @@ def main(argv):
 
     print("Pareto front: ")
     for solution in pareto_front:
-        print(str(solution))
+        print(str(solution.cost))
 
     return pareto_front
 
