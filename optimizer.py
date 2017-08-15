@@ -70,6 +70,7 @@ class Visualizer:
             self.fig.tight_layout()
         else:
             # for pareto front visualization
+            self.fig = plt.figure(figsize=(8, 6))
             self.fig.canvas.set_window_title("Multi-Objective Pareto Frontier Visualization")
             self.ax = Axes3D(self.fig)
             self.ax.set_position([-0.045, 0, 0.999, 0.999])
@@ -730,6 +731,7 @@ class ACS:
                 self.visualizer.update_pareto(population, local_front, global_front)
 
             self.update_pheromones(local_front)
+            #self.update_pheromones(global_front)
             print("finished epoch")
 
         print("Time is up!")
@@ -740,20 +742,21 @@ class ACS:
 
         return global_front
 
+    @timeit
     def update_pheromones(self, pareto_front):
-        best = np.random.choice(list(pareto_front), 1)[0]
-
-        literals_of_best = best.to_literal_set()
-        for literal in self.pheromones:
-            p = self.pheromones[literal]
-            steps = self.elitist_learning_rates * best.get_fitness()
-            chosen_objective = steps.argmax()
-            self.pheromones[literal][chosen_objective] = (1 - self.evaporation_rate) * p[
-                chosen_objective] + self.evaporation_rate * self.pheromones_init
-            if literal in literals_of_best:
-                self.pheromones[literal][chosen_objective] = (1 - self.elitist_learning_rates[chosen_objective]) * p[
-                    chosen_objective] + self.elitist_learning_rates[chosen_objective] * best.get_fitness()[
-                    chosen_objective]
+        #best = np.random.choice(list(pareto_front), 1)[0]
+        for best in pareto_front:
+            literals_of_best = best.to_literal_set()
+            for literal in self.pheromones:
+                p = self.pheromones[literal]
+                steps = self.elitist_learning_rates * best.get_fitness()
+                chosen_objective = steps.argmax()
+                self.pheromones[literal][chosen_objective] = (1 - self.evaporation_rate) * p[
+                    chosen_objective] + self.evaporation_rate * self.pheromones_init
+                if literal in literals_of_best:
+                    self.pheromones[literal][chosen_objective] = (1 - self.elitist_learning_rates[chosen_objective]) * p[
+                        chosen_objective] + self.elitist_learning_rates[chosen_objective] * best.get_fitness()[
+                        chosen_objective]
         self.visualizer.update_pheromone_graph(self.model, self.literals, self.pheromones.values())
 
     def construct_population(self, seconds, start):
