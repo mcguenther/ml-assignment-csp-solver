@@ -87,7 +87,7 @@ class Visualizer:
             legend3 = matplotlib.lines.Line2D([0], [0], linestyle="none", c="red", marker="s")
             self.ax.legend([legend0, legend1, legend2, legend3],
                            ["Past Populations", "Current Population", "Local Pareto Front", "Global Pareto Front"],
-                           numpoints=1, loc=(0.05, 0.85))
+                           numpoints=1, loc=1)
             self.old_pops = set()
 
 
@@ -115,7 +115,7 @@ class Visualizer:
         legend3 = matplotlib.lines.Line2D([0], [0], linestyle="none", c="red", marker="s")
         self.ax.legend([legend0, legend1, legend2, legend3],
                        ["Past Populations", "Current Population", "Local Pareto Front", "Global Pareto Front"],
-                       numpoints=1, loc=(0.045, 0.85))
+                       numpoints=1, loc=1)
 
         for solution in self.old_pops:
             self.ax.scatter(solution.cost[0], solution.cost[1], solution.cost[2], s=20, color="blue", marker="x")
