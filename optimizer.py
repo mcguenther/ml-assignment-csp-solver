@@ -34,7 +34,7 @@ def timeit(method):
         start = time.time()
         result = method(*args, **kw)
         end = time.time()
-        print('%r (%r, %r) %2.4f sec' % \
+        print("%r (%r, %r) %2.4f sec" % \
               (method.__name__, args, kw, end - start))
         return result
 
@@ -61,8 +61,8 @@ class Visualizer:
             self.fig = plt.figure()
             self.ax_cost_history = self.fig.add_subplot(211)
             self.ax_cost_history.set_title("Cost of best candidates over past epochs")
-            self.ax_cost_history.set_xlabel('#sample')
-            self.ax_cost_history.set_ylabel('cost of best solution')
+            self.ax_cost_history.set_xlabel("#sample")
+            self.ax_cost_history.set_ylabel("cost of best solution")
             self.plot_data, = self.ax_cost_history.plot(self.sequences)
 
             self.ax_pheromone_history = self.fig.add_subplot(212)
@@ -70,10 +70,25 @@ class Visualizer:
             self.fig.tight_layout()
         else:
             # for pareto front visualization
-            self.fig = plt.figure(figsize=(9, 6))
+            self.fig = plt.figure(figsize=(8, 6))
             self.fig.subplots_adjust(bottom=2.25, top=2.75)
             self.fig.canvas.set_window_title("Multi-Objective Pareto Frontier Visualization")
             self.ax = Axes3D(self.fig)
+            self.ax.set_position([-0.045, 0, 0.999, 0.999])
+            self.ax.set_xlabel("\nObjective1")
+            self.ax.set_ylabel("\nObjective2")
+            self.ax.set_zlabel("\n\n\nObjective3")
+            self.ax.set_xlim3d(70, 130)
+            self.ax.set_ylim3d(13000, 20000)
+            self.ax.set_zlim3d(3500000, 7000000)
+            self.ax.set_title("Solution Space", fontsize=16, fontweight="bold", y=1.023)
+            legend0 = matplotlib.lines.Line2D([0], [0], linestyle="none", c="blue", marker="x")
+            legend1 = matplotlib.lines.Line2D([0], [0], linestyle="none", c="blue", marker="o")
+            legend2 = matplotlib.lines.Line2D([0], [0], linestyle="none", c="black", marker="o")
+            legend3 = matplotlib.lines.Line2D([0], [0], linestyle="none", c="red", marker="s")
+            self.ax.legend([legend0, legend1, legend2, legend3],
+                           ["Past Populations", "Current Population", "Local Pareto Front", "Global Pareto Front"],
+                           numpoints=1)
             self.old_pops = set()
 
 
@@ -94,7 +109,7 @@ class Visualizer:
         self.ax.set_xlim3d(70, 130)
         self.ax.set_ylim3d(13000, 20000)
         self.ax.set_zlim3d(3500000, 7000000)
-        self.ax.set_title('Solution Space')
+        self.ax.set_title("Solution Space", fontsize=16, fontweight="bold", y=1.023)
         legend0 = matplotlib.lines.Line2D([0], [0], linestyle="none", c="blue", marker="x")
         legend1 = matplotlib.lines.Line2D([0], [0], linestyle="none", c="blue", marker="o")
         legend2 = matplotlib.lines.Line2D([0], [0], linestyle="none", c="black", marker="o")
@@ -102,7 +117,6 @@ class Visualizer:
         self.ax.legend([legend0, legend1, legend2, legend3],
                        ["Past Populations", "Current Population", "Local Pareto Front", "Global Pareto Front"],
                        numpoints=1)
-        # update pareto front visualization
 
         for solution in self.old_pops:
             self.ax.scatter(solution.cost[0], solution.cost[1], solution.cost[2], s=20, color="blue", marker="x")
@@ -118,8 +132,8 @@ class Visualizer:
 
     def init_pheromone_graph(self):
         self.ax_pheromone_history.set_title("Current values of pheromones")
-        self.ax_pheromone_history.set_xlabel('component id')
-        self.ax_pheromone_history.set_ylabel('pheromone value')
+        self.ax_pheromone_history.set_xlabel("component id")
+        self.ax_pheromone_history.set_ylabel("pheromone value")
 
     #    def add_sequence(self):
     #       self.sequences = []
@@ -145,7 +159,7 @@ class Visualizer:
         min_index = self.sequences.index(min(self.sequences))
         xy = (min_index, self.sequences[min_index] + 1)
         self.last_annotation = self.ax_cost_history.annotate(round(self.sequences[min_index], 3),
-                                                             xy=xy, textcoords='data',
+                                                             xy=xy, textcoords="data",
                                                              bbox=dict(boxstyle="round", fc="0.8"))
         self.ax_cost_history.plot(self.sequences, "b-")
         pylab.pause(1.e-8)
@@ -183,15 +197,15 @@ class Visualizer:
             (model.variable2name[abs(literal)] + "=" + str(0 if literal < 0 else 1) for literal in truncated_literals))
         self.ax_pheromone_history.clear()
         # Set number of ticks for x-axis
-        # self.ax_pheromone_history.xticks(np.arange(num_pheromones), comp_names, rotation='vertical')
+        # self.ax_pheromone_history.xticks(np.arange(num_pheromones), comp_names, rotation="vertical")
         self.ax_pheromone_history.set_xticks(np.arange(self.max_pheromones))
         # Set ticks labels for x-axis
-        self.ax_pheromone_history.set_xticklabels(comp_names, rotation='vertical', fontsize=8)
+        self.ax_pheromone_history.set_xticklabels(comp_names, rotation="vertical", fontsize=8)
 
         self.init_pheromone_graph()
         # let's use two nice colours for bars of the same component:
         # #FC89AC "Tickle Me Pink" and #DE5285 "Fandango Pink"
-        colors = ['#FC89AC'] * 2 + ['#DE5285'] * 2
+        colors = ["#FC89AC"] * 2 + ["#DE5285"] * 2
         self.ax_pheromone_history.bar(np.arange(self.max_pheromones), truncated_pheromones, color=colors)
         self.fig.tight_layout()
         pylab.pause(1.e-8)
@@ -325,22 +339,22 @@ class Model:
         parent2children = {}
 
         cnf = []
-        for option in root.iter('configurationOption'):
-            key = option.find('name').text
-            is_optional = str2bool(option.find('optional').text)
+        for option in root.iter("configurationOption"):
+            key = option.find("name").text
+            is_optional = str2bool(option.find("optional").text)
             new_literal = len(name2literal) + 1
             name2literal[key] = new_literal
             literal2name[new_literal] = key
             name2is_optional[key] = is_optional
 
-            parent_option = option.find('parent')
+            parent_option = option.find("parent")
             if parent_option.text and parent_option.text.strip():
                 parent_id = name2literal[parent_option.text]
                 if parent_id not in parent2children:
                     parent2children[parent_id] = set()
                 parent2children[parent_id].add(new_literal)
 
-            excluded_options_tag = option.find('excludedOptions')
+            excluded_options_tag = option.find("excludedOptions")
             excluded_options = excluded_options_tag.findall("options")
             if excluded_options:
                 name2excluded[key] = set()
@@ -893,8 +907,8 @@ class ACS:
         file_200 = "brute_" + vm + ".csv"
         top_200 = []
 
-        with open(file_200, newline='') as csvfile:
-            reader = csv.reader(csvfile, delimiter=' ', quotechar='|')
+        with open(file_200, newline="") as csvfile:
+            reader = csv.reader(csvfile, delimiter=" ", quotechar="|")
             for row in reader:
                 top_200.append(row)
         top_200.pop(0)  # remove header
