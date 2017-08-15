@@ -703,7 +703,7 @@ class ACS:
         # main part
         start = time.time()
         best = None
-        top_30 = []
+        top_list = []
         # self.visualizer.add_sequence()
 
         pareto = ParetoFront(self.model)
@@ -711,14 +711,15 @@ class ACS:
             population = self.construct_population(seconds, start)
 
             for solution in population:
-                # append top 30 list
-                sol_cost = solution.get_cost()[0]
-                top_30.append((sol_cost, solution))
-                top_30.sort(key=itemgetter(0))
-                if len(top_30) > 30:
-                    top_30.pop()
 
                 if self.model.num_objectives == 1:
+                    # fill top 30 list
+                    sol_cost = solution.get_cost()[0]
+                    top_list.append((sol_cost, solution))
+                    top_list.sort(key=itemgetter(0))
+                    if len(top_list) > 30:
+                        top_list.pop()
+                    # get best solution
                     if not best or (sol_cost < best.get_cost()[0]):
                         best = solution
                         self.visualizer.add_solution_forced(best.get_cost()[0])
@@ -728,7 +729,7 @@ class ACS:
                         self.visualizer.add_solution(sol_cost)
 
             local_front, global_front = pareto.update_front(population)
-            if self.model.num_objectives == 3:
+            if self.model.num_objectives > 1:
                 self.visualizer.update_pareto(population, local_front, global_front)
 
             self.update_pheromones(local_front)
@@ -737,8 +738,10 @@ class ACS:
         print("Time is up!")
         self.visualizer.visualize()
 
-        # save top 30 list to csv file
-        # self.save_top_candidates_csv(top_30)
+        # save top 30 list or global pareto front to csv file
+        if self.model.num_objectives > 1:
+            top_list = global_front
+        self.save_top_candidates_csv(top_list)
 
         return global_front
 
@@ -789,18 +792,30 @@ class ACS:
             possible_literals.remove(new_literal)
         return solution
 
-    def save_top_candidates_csv(self, top_30):
-        header = ["Fitness"]
+    def save_top_candidates_csv(self, top_list):
+        csv_list = []
+        if self.model.num_objectives == 1:
+            header = ["Fitness"]
+            plain_solutions = [sub_list[1] for sub_list in top_list]
+            for sol in plain_solutions:
+                mini_list = []
+                mini_list.append(sol.fitness)
+                for i in range(len(sol.components)):
+                    mini_list.append(sol.components[i].state)
+                csv_list.append(mini_list)
+        else:
+            header = ["Objective1", "Objective2", "Objective3"]
+            plain_solutions = list(top_list)
+            for sol in plain_solutions:
+                mini_list = []
+                for i in range(self.model.num_objectives):
+                    mini_list.append(sol.cost[i])
+                for i in range(len(sol.features)):
+                    mini_list.append(sol.features[i])
+                csv_list.append(mini_list)
+            
         for feature in self.model.name2variable:
             header.append(feature)
-        plain_solutions = [sub_list[1] for sub_list in top_30]
-        csv_list = []
-        for sol in plain_solutions:
-            mini_list = []
-            mini_list.append(sol.fitness)
-            for i in range(len(sol.components)):
-                mini_list.append(sol.components[i].state)
-            csv_list.append(mini_list)
         vm = os.path.splitext(os.path.basename(self.model.vm_path))[0]
         file = "acs_" + vm + ".csv"
         with open(file, "w") as csv_file:
@@ -808,8 +823,8 @@ class ACS:
             out.writerows([header])
             out.writerows(csv_list)
 
-            # compare top_30 with top_200 from brute force
-            # self.compare_lists(top_30, vm)
+        # compare top_list with top_200 from brute force
+        # self.compare_lists(top_list, vm)
 
     # @timeit
     def elitist_literal_selection(self, solution, possible_literals):
@@ -1070,7 +1085,7 @@ def main(argv):
         visualizer.set_sleep_time_costs(100)
         visualizer.set_sleep_time_pheromones(20)
         acs = ACS(model, visualizer)
-        pareto_front = acs.find_best_solution(seconds=20)
+        pareto_front = acs.find_best_solution(seconds=7)
 
     print("Pareto front: ")
     for solution in pareto_front:
