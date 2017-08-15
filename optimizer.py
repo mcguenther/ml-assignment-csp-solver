@@ -473,7 +473,7 @@ class Solution:
         self.decisions[index] = 1
 
     def __str__(self):
-        return "Solution( " + str(self.get_fitness()) + " | " + str(self.features) + ")"
+        return "Solution( " + str(self.get_fitness()) + " | " + str(self.features) + " )"
         # return "Solution( )"
 
     def __repr__(self):
@@ -702,7 +702,7 @@ class ACS:
         # main part
         start = time.time()
         best = None
-        top_list = []
+        top_set = set()
         # self.visualizer.add_sequence()
 
         pareto = ParetoFront(self.model)
@@ -714,8 +714,8 @@ class ACS:
                 if self.model.num_objectives == 1:
                     # fill top 30 list
                     sol_cost = solution.get_cost()[0]
-                    top_list.append((sol_cost, solution))
-                    top_list.sort(key=itemgetter(0))
+                    top_set.add((sol_cost, solution))
+                    top_list = sorted(top_set, key=itemgetter(0))
                     if len(top_list) > 30:
                         top_list.pop()
                     # get best solution
@@ -745,7 +745,7 @@ class ACS:
 
         return global_front
 
-    @timeit
+    # @timeit
     def update_pheromones(self, pareto_front):
         #best = np.random.choice(list(pareto_front), 1)[0]
         for best in pareto_front:
@@ -802,23 +802,17 @@ class ACS:
         if self.model.num_objectives == 1:
             header = ["Fitness"]
             plain_solutions = [sub_list[1] for sub_list in top_list]
-            for sol in plain_solutions:
-                mini_list = []
-                mini_list.append(sol.fitness)
-                for i in range(len(sol.components)):
-                    mini_list.append(sol.components[i].state)
-                csv_list.append(mini_list)
         else:
             header = ["Objective1", "Objective2", "Objective3"]
             plain_solutions = list(top_list)
-            for sol in plain_solutions:
-                mini_list = []
-                for i in range(self.model.num_objectives):
-                    mini_list.append(sol.cost[i])
-                for i in range(len(sol.features)):
-                    mini_list.append(sol.features[i])
-                csv_list.append(mini_list)
             
+        for sol in plain_solutions:
+            mini_list = []
+            for i in range(self.model.num_objectives):
+                mini_list.append(sol.cost[i])
+            for i in range(len(sol.features)):
+                mini_list.append(sol.features[i])
+            csv_list.append(mini_list)
         for feature in self.model.name2variable:
             header.append(feature)
         vm = os.path.splitext(os.path.basename(self.model.vm_path))[0]
