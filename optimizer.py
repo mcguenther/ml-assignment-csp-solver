@@ -1075,7 +1075,7 @@ def main(argv):
 
     print("Pareto front: ")
     for solution in pareto_front:
-        print(str(solution))
+        print(str(solution.cost))
 
     return pareto_front
 
