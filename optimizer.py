@@ -651,7 +651,7 @@ class ACS:
             self.literals.append(literal_on)
             self.literals.append(literal_off)
 
-        self.elitist_learning_rate = self.estimate_elitist_learning_rate()
+        self.elitist_learning_rates = self.estimate_elitist_learning_rate()
         self.start_literals, self.start_features, self.start_decisions = self.get_minimum_solution()
         self.pheromones = {}
         for literal in self.literals:
@@ -734,11 +734,14 @@ class ACS:
         literals_of_best = best.to_literal_set()
         for literal in self.pheromones:
             p = self.pheromones[literal]
-            self.pheromones[literal] = (
-                                           1 - self.evaporation_rate) * p + self.evaporation_rate * self.pheromones_init
+            self.pheromones[literal] = (1 - self.evaporation_rate) * p + self.evaporation_rate * self.pheromones_init
             if literal in literals_of_best:
-                self.pheromones[literal] = (1 - self.elitist_learning_rate) * p \
-                                           + self.elitist_learning_rate * best.get_fitness()[0]
+                steps = self.elitist_learning_rates * best.get_fitness()
+                chosen_objective = steps.argmax()
+
+                self.pheromones[literal] = (1 - self.elitist_learning_rates[chosen_objective]) * p + \
+                                           self.elitist_learning_rates[chosen_objective] * best.get_fitness()[
+                                               chosen_objective]
         self.visualizer.update_pheromone_graph(self.model, self.literals, self.pheromones.values())
 
     def construct_population(self, seconds, start):
@@ -884,10 +887,10 @@ class ACS:
             solution = Solution(self.model, start_literals=sol)
             cost_list.append(solution.get_fitness())
 
-        median = np.median(np.array(cost_list))
+        medians = np.median(np.array(cost_list), axis=0)
         # 0.0001 * 100 =!= x * median
-        rate = self.max_pheromone_step / median
-        return rate  # optimizer python module
+        rates = self.max_pheromone_step / medians
+        return rates  # optimizer python module
 
     def compare_lists(self, top_30, vm):
         file_200 = "brute_" + vm + ".csv"
@@ -1056,7 +1059,7 @@ def main(argv):
         visualizer.set_sleep_time_costs(100)
         visualizer.set_sleep_time_pheromones(20)
         acs = ACS(model, visualizer)
-        pareto_front = acs.find_best_solution(seconds=20)
+        pareto_front = acs.find_best_solution(seconds=180)
 
     print("Pareto front: ")
     for solution in pareto_front:
