@@ -574,12 +574,12 @@ class BruteForce:
         self.model = model
         # do we need to init these components?
         self.components = []
-        for feature in model.features:
-            # print(feature)
-            component_off = Component(feature, 0, model)
-            component_on = Component(feature, 1, model)
-            self.components.append(component_off)
-            self.components.append(component_on)
+        # for feature in model.features:
+        #     # print(feature)
+        #     component_off = Component(feature, 0, model)
+        #     component_on = Component(feature, 1, model)
+        #     self.components.append(component_off)
+        #     self.components.append(component_on)
         self.max_run_time = 5  # in seconds
         self.visualizer = visualizer
 
@@ -587,22 +587,23 @@ class BruteForce:
         # main part
         best = None
         cnf_solutions = pycosat.itersolve(self.model.constraint_list)
-        top_200 = []
+        top_set = set()
 
         # calculate all solutions
         counter = 0
         for sol in cnf_solutions:
-            solution = Solution(self.model)
-            for number in sol:
-                feature_name = next(key for key, value in self.model.name2variable.items() if value == abs(number))
-                toggle = lambda x: (1, 0)[x < 0]
-                new_component = Component(feature_name, toggle(number), self.model)
-                solution.append(new_component)
+            solution = Solution(self.model, start_literals=sol)
+            # for number in sol:
+            #     feature_name = next(key for key, value in self.model.name2variable.items() if value == abs(number))
+            #     toggle = lambda x: (1, 0)[x < 0]
+            #     new_component = Component(feature_name, toggle(number), self.model)
+            #     solution.append(new_component)
 
-            # append top 200 list
-            sol_fitness = solution.get_fitness()
-            top_200.append((sol_fitness, solution))
-            top_200.sort(key=itemgetter(0))
+            # fill top 200 list
+            sol_fitness = solution.get_cost()
+            print(sol_fitness)
+            top_set.add((sol_fitness[0], solution))
+            top_200 = sorted(top_set, key=itemgetter(0))
             if len(top_200) > 200:
                 top_200.pop()
 
@@ -621,9 +622,9 @@ class BruteForce:
         csv_list = []
         for sol in plain_solutions:
             mini_list = []
-            mini_list.append(sol.fitness)
-            for i in range(len(sol.components)):
-                mini_list.append(sol.components[i].state)
+            mini_list.append(sol.cost[0])
+            for i in range(len(sol.features)):
+                mini_list.append(int(sol.features[i]))
             csv_list.append(mini_list)
 
         vm = os.path.splitext(os.path.basename(self.model.vm_path))[0]
@@ -1076,15 +1077,16 @@ def main(argv):
         visualizer.set_sleep_time_costs(50)
         brute_force = BruteForce(model, visualizer)
         pareto_front = brute_force.find_best_solution()
+        print("Best:", pareto_front.cost)
     else:
         visualizer.set_sleep_time_costs(100)
         visualizer.set_sleep_time_pheromones(20)
         acs = ACS(model, visualizer)
         pareto_front = acs.find_best_solution(seconds=7)
 
-    print("Pareto front: ")
-    for solution in pareto_front:
-        print(str(solution.cost))
+        print("Pareto front:")
+        for solution in pareto_front:
+            print(str(solution.cost))
 
     return pareto_front
 
