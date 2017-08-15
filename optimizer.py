@@ -735,9 +735,10 @@ class ACS:
                         self.visualizer.add_solution(sol_cost)
 
             local_front, global_front = pareto.update_front(population)
-            self.update_pheromones(local_front)
+            if self.model.num_objectives == 3:
+                self.visualizer.update_pareto(population, local_front, global_front)
 
-            self.visualizer.update_pareto(population, local_front, global_front)
+            self.update_pheromones(local_front)
             print("finished epoch")
 
         self.visualizer.visualize()
