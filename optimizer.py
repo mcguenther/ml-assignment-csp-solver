@@ -1,3 +1,4 @@
+import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import matplotlib.pylab as pylab
 import matplotlib.lines
@@ -54,7 +55,7 @@ class Visualizer:
         self.sequences = []
         plt.ion()
 
-        self.max_pheromones = 30
+        self.max_pheromones = 8
         self.last_annotation = None
 
         if self.model.num_objectives == 1:
@@ -70,28 +71,21 @@ class Visualizer:
             self.fig.tight_layout()
         else:
             # for pareto front visualization
-            self.fig = plt.figure(figsize=(8, 6))
+            self.fig = plt.figure()
             self.fig.canvas.set_window_title("Multi-Objective Pareto Frontier Visualization")
-            self.ax = Axes3D(self.fig)
-            self.ax.set_position([-0.04, 0, 0.999, 0.999])
-            self.ax.set_xlabel("\nObjective1")
-            self.ax.set_ylabel("\nObjective2")
-            self.ax.set_zlabel("\n\n\nObjective3")
-            # self.ax.set_xlim3d(70, 130)
-            # self.ax.set_ylim3d(13000, 20000)
-            # self.ax.set_zlim3d(3500000, 7000000)
-            self.ax.set_title("Solution Space", fontsize=16, fontweight="bold", y=1.023)
-            legend0 = matplotlib.lines.Line2D([0], [0], linestyle="none", c="blue", marker="x")
-            legend1 = matplotlib.lines.Line2D([0], [0], linestyle="none", c="blue", marker="o")
-            legend2 = matplotlib.lines.Line2D([0], [0], linestyle="none", c="black", marker="o")
-            legend3 = matplotlib.lines.Line2D([0], [0], linestyle="none", c="red", marker="s")
-            self.ax.legend([legend0, legend1, legend2, legend3],
-                           ["Past Populations", "Current Population", "Local Pareto Front", "Global Pareto Front"],
-                           numpoints=1, loc=1)
+
+            gs = gridspec.GridSpec(4, 1)
+            self.ax1 = self.fig.add_subplot(gs[:3, :], projection='3d')
+            self.ax1.set_xlabel("\nObjective1")
+            self.ax1.set_ylabel("\nObjective2")
+            self.ax1.set_zlabel("\n\n\nObjective3")
+            self.ax1.set_title("Solution Space", fontsize=16, fontweight="bold")
+
+            self.ax_pheromone_history = self.fig.add_subplot(gs[3, :])
+            self.init_pheromone_graph()
+            self.fig.tight_layout()
+
             self.old_pops = set()
-
-
-            # plt.ion()
 
         # self.fig.subplots_adjust(left=None, bottom=None, right=None, top=None, wspace=None, hspace=10)
         pylab.pause(1.e-8)
@@ -101,31 +95,31 @@ class Visualizer:
         self.sleep_cycles_pheromones = sleep_cycles_pheromones
 
     def update_pareto(self, population, local_front, global_front):
-        self.ax.clear()
-        self.ax.set_xlabel("\nObjective1")
-        self.ax.set_ylabel("\nObjective2")
-        self.ax.set_zlabel("\n\n\nObjective3")
-        self.ax.set_xlim3d(60, 140)
-        self.ax.set_ylim3d(11000, 25000)
-        self.ax.set_zlim3d(3000000, 8000000)
-        self.ax.set_title("Solution Space", fontsize=16, fontweight="bold", y=1.023)
+        self.ax1.clear()
+        self.ax1.set_xlabel("\nObjective1")
+        self.ax1.set_ylabel("\nObjective2")
+        self.ax1.set_zlabel("\n\n\nObjective3")
+        self.ax1.set_xlim3d(60, 140)
+        self.ax1.set_ylim3d(11000, 25000)
+        self.ax1.set_zlim3d(3000000, 8000000)
+        self.ax1.set_title("Solution Space", fontsize=16, fontweight="bold")
         legend0 = matplotlib.lines.Line2D([0], [0], linestyle="none", c="blue", marker="x")
         legend1 = matplotlib.lines.Line2D([0], [0], linestyle="none", c="blue", marker="o")
         legend2 = matplotlib.lines.Line2D([0], [0], linestyle="none", c="black", marker="o")
         legend3 = matplotlib.lines.Line2D([0], [0], linestyle="none", c="red", marker="s")
-        self.ax.legend([legend0, legend1, legend2, legend3],
-                       ["Past Populations", "Current Population", "Local Pareto Front", "Global Pareto Front"],
-                       numpoints=1, loc=1)
+        self.ax1.legend([legend0, legend1, legend2, legend3],
+                        ["Past Populations", "Current Population", "Local Pareto Front", "Global Pareto Front"],
+                        numpoints=1, loc=1)
 
         for solution in self.old_pops:
-            self.ax.scatter(solution.cost[0], solution.cost[1], solution.cost[2], s=20, color="blue", marker="x")
+            self.ax1.scatter(solution.cost[0], solution.cost[1], solution.cost[2], s=20, color="blue", marker="x")
         for solution in population:
-            self.ax.scatter(solution.cost[0], solution.cost[1], solution.cost[2], s=30, color="blue", marker="o")
+            self.ax1.scatter(solution.cost[0], solution.cost[1], solution.cost[2], s=30, color="blue", marker="o")
             self.old_pops.add(solution)
         for solution in global_front:
-            self.ax.scatter(solution.cost[0], solution.cost[1], solution.cost[2], s=80, color="red", marker="s")
+            self.ax1.scatter(solution.cost[0], solution.cost[1], solution.cost[2], s=80, color="red", marker="s")
         for solution in local_front:
-            self.ax.scatter(solution.cost[0], solution.cost[1], solution.cost[2], s=30, color="black", marker="o")
+            self.ax1.scatter(solution.cost[0], solution.cost[1], solution.cost[2], s=30, color="black", marker="o")
         # plt.tight_layout()
         plt.pause(0.005)
 
@@ -180,32 +174,34 @@ class Visualizer:
         self.sleep_cycles_pheromones = x
 
     def update_pheromone_graph(self, model, literals, pheromones):
-        if self.model.num_objectives == 1:
-            if self.sleep_state_pheromones % (self.sleep_cycles_pheromones + 1) == 0:
-                self.update_pheromone_graph_forced(model, literals, pheromones)
-                self.sleep_state_pheromones = 1
-            else:
-                self.sleep_state_pheromones += 1
+        if self.sleep_state_pheromones % (self.sleep_cycles_pheromones + 1) == 0:
+            self.update_pheromone_graph_forced(model, literals, pheromones)
+            self.sleep_state_pheromones = 1
+        else:
+            self.sleep_state_pheromones += 1
 
-    # @timeit
+    @timeit
     def update_pheromone_graph_forced(self, model, literals, pheromones):
         truncated_literals = literals[:self.max_pheromones]
+        truncated_literals_per_objective = np.repeat(truncated_literals, self.model.num_objectives)
         p_list = list(pheromones)
-        truncated_pheromones = p_list[:self.max_pheromones]
+        truncated_pheromones = np.array(p_list[:self.max_pheromones]).flatten()
         comp_names = list(
-            (model.variable2name[abs(literal)] + "=" + str(0 if literal < 0 else 1) for literal in truncated_literals))
+            (model.variable2name[abs(literal)] + "=" + str(0 if literal < 0 else 1) for literal in
+             truncated_literals_per_objective))
         self.ax_pheromone_history.clear()
         # Set number of ticks for x-axis
         # self.ax_pheromone_history.xticks(np.arange(num_pheromones), comp_names, rotation="vertical")
-        self.ax_pheromone_history.set_xticks(np.arange(self.max_pheromones))
+        self.ax_pheromone_history.set_xticks(np.arange(self.max_pheromones * self.model.num_objectives))
         # Set ticks labels for x-axis
         self.ax_pheromone_history.set_xticklabels(comp_names, rotation="vertical", fontsize=8)
 
         self.init_pheromone_graph()
         # let's use two nice colours for bars of the same component:
         # #FC89AC "Tickle Me Pink" and #DE5285 "Fandango Pink"
-        colors = ["#FC89AC"] * 2 + ["#DE5285"] * 2
-        self.ax_pheromone_history.bar(np.arange(self.max_pheromones), truncated_pheromones, color=colors)
+        colors = ["#FC89AC"] * 2 * self.model.num_objectives + ["#DE5285"] * 2 * self.model.num_objectives
+        self.ax_pheromone_history.bar(np.arange(self.max_pheromones * self.model.num_objectives), truncated_pheromones,
+                                      color=colors)
         self.fig.tight_layout()
         pylab.pause(1.e-8)
 
@@ -733,7 +729,7 @@ class ACS:
                 self.visualizer.update_pareto(population, local_front, global_front)
 
             self.update_pheromones(local_front)
-            #self.update_pheromones(global_front)
+            # self.update_pheromones(global_front)
             print("finished epoch")
 
         print("Time is up!")
@@ -746,9 +742,8 @@ class ACS:
 
         return global_front
 
-    # @timeit
     def update_pheromones(self, pareto_front):
-        #best = np.random.choice(list(pareto_front), 1)[0]
+        # best = np.random.choice(list(pareto_front), 1)[0]
         for best in pareto_front:
             literals_of_best = best.to_literal_set()
             for literal in self.pheromones:
@@ -758,9 +753,13 @@ class ACS:
                 self.pheromones[literal][chosen_objective] = (1 - self.evaporation_rate) * p[
                     chosen_objective] + self.evaporation_rate * self.pheromones_init
                 if literal in literals_of_best:
-                    self.pheromones[literal][chosen_objective] = (1 - self.elitist_learning_rates[chosen_objective]) * p[
-                        chosen_objective] + self.elitist_learning_rates[chosen_objective] * best.get_fitness()[
-                        chosen_objective]
+                    self.pheromones[literal][chosen_objective] = (1 - self.elitist_learning_rates[chosen_objective]) * \
+                                                                 p[
+                                                                     chosen_objective] + self.elitist_learning_rates[
+                                                                                             chosen_objective] * \
+                                                                                         best.get_fitness()[
+                                                                                             chosen_objective]
+
         self.visualizer.update_pheromone_graph(self.model, self.literals, self.pheromones.values())
 
     def construct_population(self, seconds, start):
@@ -806,7 +805,6 @@ class ACS:
         else:
             header = ["Objective1", "Objective2", "Objective3"]
             plain_solutions = list(top_list)
-            
         for sol in plain_solutions:
             mini_list = []
             for i in range(self.model.num_objectives):
@@ -823,8 +821,8 @@ class ACS:
             out.writerows([header])
             out.writerows(csv_list)
 
-        # compare top_list with top_200 from brute force
-        # self.compare_lists(top_list, vm)
+            # compare top_list with top_200 from brute force
+            # self.compare_lists(top_list, vm)
 
     # @timeit
     def elitist_literal_selection(self, solution, possible_literals):
@@ -1080,9 +1078,9 @@ def main(argv):
         print("Best:", pareto_front.cost)
     else:
         visualizer.set_sleep_time_costs(100)
-        visualizer.set_sleep_time_pheromones(20)
+        visualizer.set_sleep_time_pheromones(0)
         acs = ACS(model, visualizer)
-        pareto_front = acs.find_best_solution(seconds=7)
+        pareto_front = acs.find_best_solution(seconds=30)
 
         print("Pareto front:")
         for solution in pareto_front:
