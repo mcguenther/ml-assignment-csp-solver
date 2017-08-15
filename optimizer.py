@@ -47,24 +47,45 @@ class VM:
 
 
 class Visualizer:
-    def __init__(self, sleep_cycles=10, sleep_cycles_pheromones=None):
+    def __init__(self, model, sleep_cycles=10, sleep_cycles_pheromones=None):
+        self.model = model
         if not sleep_cycles_pheromones:
             sleep_cycles_pheromones = sleep_cycles
         self.sequences = []
         plt.ion()
-        self.fig = plt.figure()
+
         self.max_pheromones = 30
         self.last_annotation = None
-        self.ax_cost_history = self.fig.add_subplot(211)
-        self.ax_cost_history.set_title("Cost of best candidates over past epochs")
-        self.ax_cost_history.set_xlabel('#sample')
-        self.ax_cost_history.set_ylabel('cost of best solution')
-        self.plot_data, = self.ax_cost_history.plot(self.sequences)
 
-        self.ax_pheromone_history = self.fig.add_subplot(212)
-        self.init_pheromone_graph()
+        if self.model.num_objectives == 1:
+            self.fig = plt.figure()
+            self.ax_cost_history = self.fig.add_subplot(211)
+            self.ax_cost_history.set_title("Cost of best candidates over past epochs")
+            self.ax_cost_history.set_xlabel('#sample')
+            self.ax_cost_history.set_ylabel('cost of best solution')
+            self.plot_data, = self.ax_cost_history.plot(self.sequences)
 
-        self.fig.tight_layout()
+            self.ax_pheromone_history = self.fig.add_subplot(212)
+            self.init_pheromone_graph()
+            self.fig.tight_layout()
+        else:
+            # for pareto front visualization
+            self.fig = plt.figure(figsize=(9, 6))
+            self.ax = Axes3D(self.fig)
+            self.ax.set_xlabel("\nObjective1")
+            self.ax.set_ylabel("\nObjective2")
+            self.ax.set_zlabel("\n\n\nObjective3")
+            self.ax.set_xlim3d(70, 130)
+            self.ax.set_ylim3d(14000, 20000)
+            self.ax.set_zlim3d(3500000, 7000000)
+            legend1 = matplotlib.lines.Line2D([0], [0], linestyle="none", c="blue", marker="o")
+            legend2 = matplotlib.lines.Line2D([0], [0], linestyle="none", c="black", marker="o")
+            legend3 = matplotlib.lines.Line2D([0], [0], linestyle="none", c="red", marker="s")
+            self.ax.legend([legend1, legend2, legend3],
+                           ["Current Population", "Local Pareto Front", "Global Pareto Front"],
+                           numpoints=1)
+            # plt.ion()
+
         # self.fig.subplots_adjust(left=None, bottom=None, right=None, top=None, wspace=None, hspace=10)
         pylab.pause(1.e-8)
         self.sleep_cycles_costs = sleep_cycles
@@ -72,13 +93,23 @@ class Visualizer:
         self.sleep_state_pheromones = 1
         self.sleep_cycles_pheromones = sleep_cycles_pheromones
 
+    def update_pareto(self, population, local_front, global_front):
+        # update pareto front visualization
+        for solution in population:
+            self.ax.scatter(solution.cost[0], solution.cost[1], solution.cost[2], s=30, color="blue", marker="o")
+        for solution in global_front:
+            self.ax.scatter(solution.cost[0], solution.cost[1], solution.cost[2], s=80, color="red", marker="s")
+        for solution in local_front:
+            self.ax.scatter(solution.cost[0], solution.cost[1], solution.cost[2], s=30, color="black", marker="o")
+        plt.pause(0.005)
+
     def init_pheromone_graph(self):
         self.ax_pheromone_history.set_title("Current values of pheromones")
         self.ax_pheromone_history.set_xlabel('component id')
         self.ax_pheromone_history.set_ylabel('pheromone value')
 
-    def add_sequence(self):
-        self.sequences = []
+    #    def add_sequence(self):
+    #       self.sequences = []
 
     def add_solution(self, cost):
         if self.sleep_state % (self.sleep_cycles_costs + 1) == 0:
@@ -88,8 +119,8 @@ class Visualizer:
             self.sleep_state += 1
 
     def add_solution_forced(self, cost):
-        if not self.sequences:
-            self.add_sequence()
+        # if not self.sequences:
+        #    self.add_sequence()
         self.sequences.append(cost)
         self.update_cost_graph()
 
@@ -108,9 +139,12 @@ class Visualizer:
 
     def visualize(self):
         costs = self.sequences
-        print("Best: " + str(min(costs)) + " | Worst: " +
-              str(max(costs)) + " | Avg: " + str(sum(costs) / len(costs)))
-        self.update_cost_graph()
+        if self.model.num_objectives == 1:
+            print("Best: " + str(min(costs)) + " | Worst: " +
+                  str(max(costs)) + " | Avg: " + str(sum(costs) / len(costs)))
+            self.update_cost_graph()
+        else:
+            pass
         plt.show(block=True)
 
     def set_sleep_time_costs(self, x):
@@ -120,11 +154,12 @@ class Visualizer:
         self.sleep_cycles_pheromones = x
 
     def update_pheromone_graph(self, model, literals, pheromones):
-        if self.sleep_state_pheromones % (self.sleep_cycles_pheromones + 1) == 0:
-            self.update_pheromone_graph_forced(model, literals, pheromones)
-            self.sleep_state_pheromones = 1
-        else:
-            self.sleep_state_pheromones += 1
+        if self.model.num_objectives == 1:
+            if self.sleep_state_pheromones % (self.sleep_cycles_pheromones + 1) == 0:
+                self.update_pheromone_graph_forced(model, literals, pheromones)
+                self.sleep_state_pheromones = 1
+            else:
+                self.sleep_state_pheromones += 1
 
     # @timeit
     def update_pheromone_graph_forced(self, model, literals, pheromones):
@@ -151,6 +186,9 @@ class Visualizer:
 
 class DummyVisualizer:
     def __init__(self):
+        pass
+
+    def update_pareto(self, population, local_front, global_front):
         pass
 
     def add_sequence(self):
@@ -410,7 +448,7 @@ class Solution:
 
     def __str__(self):
         return "Solution( " + str(self.get_fitness()) + " | " + str(self.features) + ")"
-        #return "Solution( )"
+        # return "Solution( )"
 
     def __repr__(self):
         return "Solution( " + "complete" if self.is_complete() else "incomplete" + " )"
@@ -673,21 +711,8 @@ class ACS:
         start = time.time()
         best = None
         top_30 = []
-        self.visualizer.add_sequence()
-        # for pareto front visualization
-        fig = plt.figure(figsize=(9, 6))
-        ax = Axes3D(fig)
-        ax.set_xlabel("\nObjective1")
-        ax.set_ylabel("\nObjective2")
-        ax.set_zlabel("\n\n\nObjective3")
-        ax.set_xlim3d(70, 130)
-        ax.set_ylim3d(14000,20000)
-        ax.set_zlim3d(3500000,7000000)
-        legend1 = matplotlib.lines.Line2D([0],[0], linestyle="none", c="blue", marker="o")
-        legend2 = matplotlib.lines.Line2D([0],[0], linestyle="none", c="black", marker="o")
-        legend3 = matplotlib.lines.Line2D([0],[0], linestyle="none", c="red", marker="s")
-        ax.legend([legend1, legend2, legend3], ["Current Population", "Local Pareto Front", "Global Pareto Front"], numpoints = 1)
-        plt.ion()
+        # self.visualizer.add_sequence()
+
         pareto = ParetoFront(self.model)
         while not self.time_up(start, seconds):
             population = self.construct_population(seconds, start)
@@ -700,25 +725,19 @@ class ACS:
                 if len(top_30) > 30:
                     top_30.pop()
 
-                if not best or (sol_cost < best.get_cost()[0]):
-                    best = solution
-                    self.visualizer.add_solution_forced(best.get_cost()[0])
-                    self.visualizer.update_pheromone_graph_forced(self.model, self.literals,
-                                                                  list(self.pheromones.values()))
-                else:
-                    self.visualizer.add_solution(sol_cost)
+                if self.model.num_objectives == 1:
+                    if not best or (sol_cost < best.get_cost()[0]):
+                        best = solution
+                        self.visualizer.add_solution_forced(best.get_cost()[0])
+                        self.visualizer.update_pheromone_graph_forced(self.model, self.literals,
+                                                                      list(self.pheromones.values()))
+                    else:
+                        self.visualizer.add_solution(sol_cost)
 
             local_front, global_front = pareto.update_front(population)
             self.update_pheromones(local_front)
-            
-            # update pareto front visualization
-            for solution in population:
-                ax.scatter(solution.cost[0], solution.cost[1], solution.cost[2], s=30, color="blue", marker="o")
-            for solution in global_front:
-                ax.scatter(solution.cost[0], solution.cost[1], solution.cost[2], s=80, color="red", marker="s")
-            for solution in local_front:
-                ax.scatter(solution.cost[0], solution.cost[1], solution.cost[2], s=30, color="black", marker="o")
-            plt.pause(0.005)
+
+            self.visualizer.update_pareto(population, local_front, global_front)
             print("finished epoch")
 
         self.visualizer.visualize()
@@ -1046,7 +1065,7 @@ def main(argv):
         sys.exit(EXIT_FILE_ERROR)
 
     if do_visualization:
-        visualizer = Visualizer()
+        visualizer = Visualizer(model)
     else:
         visualizer = DummyVisualizer()
 
@@ -1058,7 +1077,7 @@ def main(argv):
         visualizer.set_sleep_time_costs(100)
         visualizer.set_sleep_time_pheromones(20)
         acs = ACS(model, visualizer)
-        pareto_front = acs.find_best_solution(seconds=30)
+        pareto_front = acs.find_best_solution(seconds=20)
 
     print("Pareto front: ")
     for solution in pareto_front:
