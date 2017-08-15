@@ -71,19 +71,12 @@ class Visualizer:
         else:
             # for pareto front visualization
             self.fig = plt.figure(figsize=(9, 6))
+            self.fig.subplots_adjust(bottom=2.25, top=2.75)
+            self.fig.canvas.set_window_title("Multi-Objective Pareto Frontier Visualization")
             self.ax = Axes3D(self.fig)
-            self.ax.set_xlabel("\nObjective1")
-            self.ax.set_ylabel("\nObjective2")
-            self.ax.set_zlabel("\n\n\nObjective3")
-            self.ax.set_xlim3d(70, 130)
-            self.ax.set_ylim3d(14000, 20000)
-            self.ax.set_zlim3d(3500000, 7000000)
-            legend1 = matplotlib.lines.Line2D([0], [0], linestyle="none", c="blue", marker="o")
-            legend2 = matplotlib.lines.Line2D([0], [0], linestyle="none", c="black", marker="o")
-            legend3 = matplotlib.lines.Line2D([0], [0], linestyle="none", c="red", marker="s")
-            self.ax.legend([legend1, legend2, legend3],
-                           ["Current Population", "Local Pareto Front", "Global Pareto Front"],
-                           numpoints=1)
+            self.old_pops = set()
+
+
             # plt.ion()
 
         # self.fig.subplots_adjust(left=None, bottom=None, right=None, top=None, wspace=None, hspace=10)
@@ -94,13 +87,33 @@ class Visualizer:
         self.sleep_cycles_pheromones = sleep_cycles_pheromones
 
     def update_pareto(self, population, local_front, global_front):
+        self.ax.clear()
+        self.ax.set_xlabel("\nObjective1")
+        self.ax.set_ylabel("\nObjective2")
+        self.ax.set_zlabel("\n\n\nObjective3")
+        self.ax.set_xlim3d(70, 130)
+        self.ax.set_ylim3d(13000, 20000)
+        self.ax.set_zlim3d(3500000, 7000000)
+        self.ax.set_title('Solution Space')
+        legend0 = matplotlib.lines.Line2D([0], [0], linestyle="none", c="blue", marker="x")
+        legend1 = matplotlib.lines.Line2D([0], [0], linestyle="none", c="blue", marker="o")
+        legend2 = matplotlib.lines.Line2D([0], [0], linestyle="none", c="black", marker="o")
+        legend3 = matplotlib.lines.Line2D([0], [0], linestyle="none", c="red", marker="s")
+        self.ax.legend([legend0, legend1, legend2, legend3],
+                       ["Past Populations", "Current Population", "Local Pareto Front", "Global Pareto Front"],
+                       numpoints=1)
         # update pareto front visualization
+
+        for solution in self.old_pops:
+            self.ax.scatter(solution.cost[0], solution.cost[1], solution.cost[2], s=20, color="blue", marker="x")
         for solution in population:
             self.ax.scatter(solution.cost[0], solution.cost[1], solution.cost[2], s=30, color="blue", marker="o")
+            self.old_pops.add(solution)
         for solution in global_front:
             self.ax.scatter(solution.cost[0], solution.cost[1], solution.cost[2], s=80, color="red", marker="s")
         for solution in local_front:
             self.ax.scatter(solution.cost[0], solution.cost[1], solution.cost[2], s=30, color="black", marker="o")
+        # plt.tight_layout()
         plt.pause(0.005)
 
     def init_pheromone_graph(self):
@@ -541,40 +554,6 @@ class ParetoFront:
 
         return front
 
-        # def compute_pareto_front(self):
-        # sort first objective
-        # self.all_solutions = self.all_solutions[self.all_solutions[:, 0].argsort()]
-        # print("All Solutions:", self.all_solutions)
-        # # add first row to pareto_front
-        # self.pareto_front = self.all_solutions[0:1, :]
-        # print("Pareto Front:", self.pareto_front)
-        # # test next row against the last row in pareto_front
-        # for row in self.all_solutions[1:, :]:
-        #     if sum([row[x] >= self.pareto_front[-1][x]
-        #             for x in range(len(row))]) == len(row):
-        #         # if it is better on all objectives add the row to pareto_front
-        #         self.pareto_front = np.concatenate((self.pareto_front, [row]))
-
-        # self.global_pareto_front.append(self.pareto_front)
-        # if len(self.global_pareto_front) > len(population):
-        #     del self.global_pareto_front[len(population):]
-
-        # sort by cost of first objective
-        # itemgetter = 0?
-        # solutions = sorted(self.all_solutions, key=itemgetter(0))
-        # add first row = objective?
-        # self.pareto_front = solutions[0]
-        # test next row against last row in pareto front -> why last?
-        # for row in solutions[1]:
-        #    # row, p or p, row
-        #    if dominates(row, self.pareto_front)
-
-        # return self.pareto_front
-
-    # row, c or c, row
-    def dominates(row, candidate_row):
-        return sum([row[x] >= candidate_row[x] for x in range(len(row))]) == len(row)
-
 
 class BruteForce:
     def __init__(self, model, visualizer):
@@ -741,9 +720,8 @@ class ACS:
             self.update_pheromones(local_front)
             print("finished epoch")
 
+        print("Time is up!")
         self.visualizer.visualize()
-        while True:
-            plt.pause(0.005)
 
         # save top 30 list to csv file
         # self.save_top_candidates_csv(top_30)
